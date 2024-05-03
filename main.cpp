@@ -212,7 +212,7 @@ glm::mat2 cov_of( const Splat& splat )
 	// for consistent order
 	if( splat.sx < splat.sy )
 	{
-		theta += glm::pi<float>();
+		theta += glm::pi<float>() * 0.5f;
 		std::swap( sx, sy );
 	}
 
@@ -225,6 +225,15 @@ glm::mat2 cov_of( const Splat& splat )
 	return glm::mat2(
 		s11, s12,
 		s12, lambda0 + lambda1 - s11 );
+}
+float safe_rot_of( const Splat& splat )
+{
+	float theta = splat.rot;
+	if( splat.sx < splat.sy )
+	{
+		theta += glm::pi<float>() * 0.5f;
+	}
+	return theta;
 }
 
 void eigen_vectors_of_cov( glm::vec2* eigen0, glm::vec2* eigen1, const glm::mat2& cov, float lambda0 /*larger*/ )
@@ -290,7 +299,7 @@ int main() {
 		//s.sy = glm::mix( 4.0f, 8.0f, r1.y );
 		s.sx = 8;
 		s.sy = 8;
-		s.rot = glm::pi<float>() * 2.0f * r1.z;
+		s.rot = glm::pi<float>() * r1.z;
 		s.color = { 0.5f, 0.5f, 0.5f };
 		splats[i] = s;
 	}
@@ -527,8 +536,9 @@ int main() {
 					-cov[1][0], cov[0][0] ) /
 				det;
 
-			float cosTheta = std::cosf( s.rot );
-			float sinTheta = std::sinf( s.rot );
+			float theta = safe_rot_of( s );
+			float cosTheta = std::cosf( theta );
+			float sinTheta = std::sinf( theta );
 
 			float r = ss_max( sqrt_of_lambda0, sqrt_of_lambda1 ) * SPLAT_BOUNDS;
 			int begX = s.pos.x - r;
