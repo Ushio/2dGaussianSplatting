@@ -192,6 +192,7 @@ int solve_quadratic( float xs[2], float a, float b, float c )
 	return 2;
 }
 
+// lambda0 is larger
 void eignValues( float* lambda0, float* lambda1, float* determinant, const glm::mat2& mat )
 {
 	float mean = ( mat[0][0] + mat[1][1] ) * 0.5f;
@@ -208,32 +209,13 @@ glm::mat2 rot2d( float rad )
 	float sinTheta = std::sinf( rad );
 	return glm::mat2( cosTheta, sinTheta, -sinTheta, cosTheta );
 };
-bool is_sxy_flipped( const Splat& splat )
-{
-	return splat.sx < splat.sy;
-}
-float consistent_rot_of( const Splat& splat )
-{
-	float theta = splat.rot;
-	if( is_sxy_flipped( splat ) )
-	{
-		theta += glm::pi<float>() * 0.5f;
-	}
-	return theta;
-}
-
-void consistent_sxy_of( float* sx, float* sy, const Splat& splat )
-{
-	*sx = ss_max( splat.sx, splat.sy );
-	*sy = ss_min( splat.sx, splat.sy );
-}
 
 // \sigma = V * L * V^(-1)
 glm::mat2 cov_of( const Splat& splat )
 {
-	float theta = consistent_rot_of( splat );
-	float sx, sy;
-	consistent_sxy_of( &sx, &sy, splat );
+	float theta = splat.rot;
+	float sx = splat.sx;
+	float sy = splat.sy;
 
 	float cosTheta = std::cosf( theta );
 	float sinTheta = std::sinf( theta );
@@ -308,7 +290,7 @@ int main() {
 		//s.sx = glm::mix( 4.0f, 8.0f, r1.x );
 		//s.sy = glm::mix( 4.0f, 8.0f, r1.y );
 		s.sx = 8;
-		s.sy = 8;
+		s.sy = 8; // warning: please make sx larger.
 		s.rot = glm::pi<float>() * r1.z;
 		s.color = { 0.5f, 0.5f, 0.5f };
 		splats[i] = s;
@@ -548,7 +530,7 @@ int main() {
 					-cov[1][0], cov[0][0] ) /
 				det;
 
-			float theta = consistent_rot_of( s );
+			float theta = s.rot;
 			float cosTheta = std::cosf( theta );
 			float sinTheta = std::sinf( theta );
 
@@ -632,10 +614,8 @@ int main() {
 						float dd_dlambda0 = -1.0f / lambda0sq * sinTheta * sinTheta;
 						float dd_dlambda1 = -1.0f / lambda1sq * cosTheta * cosTheta;
 
-						float sx, sy;
-						consistent_sxy_of( &sx, &sy, s );
-						float dlambda0_dsx = 2.0f * sx;
-						float dlambda1_dsy = 2.0f * sy;
+						float dlambda0_dsx = 2.0f * s.sx;
+						float dlambda1_dsy = 2.0f * s.sy;
 
 						float dalpha_dsx = -0.5f * alpha * ( v.x * v.x * da_dlambda0 + v.x * v.y * dbc_dlambda0 * 2.0f + v.y * v.y * dd_dlambda0 ) * dlambda0_dsx;
 						float dalpha_dsy = -0.5f * alpha * ( v.x * v.x * da_dlambda1 + v.x * v.y * dbc_dlambda1 * 2.0f + v.y * v.y * dd_dlambda1 ) * dlambda1_dsy;
@@ -660,17 +640,8 @@ int main() {
 						//float derivative = ( exp_approx( -0.5f * glm::dot( v, glm::inverse( cov_of( ds ) ) * v ) ) - alpha ) / eps;
 						//printf( "%f %f\n", dalpha_dsy, derivative );
 
-						float dsx = ( dL_dalpha.x + dL_dalpha.y + dL_dalpha.z ) * dalpha_dsx;
-						float dsy = ( dL_dalpha.x + dL_dalpha.y + dL_dalpha.z ) * dalpha_dsy;
-
-						if (is_sxy_flipped(s))
-						{
-							std::swap( dsx, dsy );
-						}
-						
-						dSplats[i].sx += dsx;
-						dSplats[i].sy += dsy;
-							
+						dSplats[i].sx += ( dL_dalpha.x + dL_dalpha.y + dL_dalpha.z ) * dalpha_dsx;
+						dSplats[i].sy += ( dL_dalpha.x + dL_dalpha.y + dL_dalpha.z ) * dalpha_dsy;
 
 						float da_dtheta = 2.0f * ( lambda0 - lambda1 ) / ( lambda0 * lambda1 ) * sinTheta * cosTheta;
 						float db_dtheta = -( lambda0 - lambda1 ) / ( lambda0 * lambda1 ) * ( cosTheta * cosTheta - sinTheta * sinTheta );
@@ -733,10 +704,18 @@ int main() {
 			// constraints
 			splats[i].pos.x = glm::clamp( splats[i].pos.x, 0.0f, (float)imageRef.width() - 1 );
 			splats[i].pos.y = glm::clamp( splats[i].pos.y, 0.0f, (float)imageRef.height() - 1 );
+
 			splats[i].sx = glm::clamp( splats[i].sx, 1.0f, 1024.0f );
 			splats[i].sy = glm::clamp( splats[i].sy, 1.0f, 1024.0f );
 
 			splats[i].color = glm::clamp( splats[i].color, { 0.0f, 0.0f, 0.0f }, { 1.0f, 1.0f, 1.0f } );
+
+			// lambda consistency for derivative calculations
+			if( splats[i].sx < splats[i].sy )
+			{
+				std::swap( splats[i].sx, splats[i].sy );
+				splats[i].rot += glm::pi<float>() * 0.5f;
+			}
 		}
 
 #if 1
