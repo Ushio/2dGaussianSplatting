@@ -617,14 +617,8 @@ int main() {
 						//	( std::expf( -0.5f * glm::dot( v + glm::vec2( 0.0f, eps ), inv_cov * ( v + glm::vec2( 0.0f, eps ) ) ) ) - std::expf( -0.5f * glm::dot( v, inv_cov * v ) ) ) / eps;
 						//printf( "%.5f %.5f\n", dalpha_dy, da );
 
-						dSplats[i].pos.x +=
-							dL_dalpha.x * dalpha_dx +
-							dL_dalpha.y * dalpha_dx +
-							dL_dalpha.z * dalpha_dx;
-						dSplats[i].pos.y +=
-							dL_dalpha.x * dalpha_dy +
-							dL_dalpha.y * dalpha_dy +
-							dL_dalpha.z * dalpha_dy;
+						dSplats[i].pos.x += ( dL_dalpha.x + dL_dalpha.y + dL_dalpha.z ) * dalpha_dx;
+						dSplats[i].pos.y += ( dL_dalpha.x + dL_dalpha.y + dL_dalpha.z ) * dalpha_dy;
 
 						float lambda0sq = lambda0 * lambda0;
 						float lambda1sq = lambda1 * lambda1;
@@ -666,12 +660,8 @@ int main() {
 						//float derivative = ( exp_approx( -0.5f * glm::dot( v, glm::inverse( cov_of( ds ) ) * v ) ) - alpha ) / eps;
 						//printf( "%f %f\n", dalpha_dsy, derivative );
 
-						float dsx = dL_dalpha.x * dalpha_dsx +
-									dL_dalpha.y * dalpha_dsx +
-									dL_dalpha.z * dalpha_dsx;
-						float dsy = dL_dalpha.x * dalpha_dsy +
-									dL_dalpha.y * dalpha_dsy +
-									dL_dalpha.z * dalpha_dsy;
+						float dsx = ( dL_dalpha.x + dL_dalpha.y + dL_dalpha.z ) * dalpha_dsx;
+						float dsy = ( dL_dalpha.x + dL_dalpha.y + dL_dalpha.z ) * dalpha_dsy;
 
 						if (is_sxy_flipped(s))
 						{
@@ -693,10 +683,7 @@ int main() {
 								dd_dtheta * v.y * v.y
 							);
 
-						dSplats[i].rot +=
-							dL_dalpha.x * dalpha_dtheta +
-							dL_dalpha.y * dalpha_dtheta +
-							dL_dalpha.z * dalpha_dtheta;
+						dSplats[i].rot += ( dL_dalpha.x + dL_dalpha.y + dL_dalpha.z ) * dalpha_dtheta;
 
 						// numerical varidation
 						//float eps = 0.001f;
