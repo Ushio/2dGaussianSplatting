@@ -259,9 +259,9 @@ int main() {
 
     textureRef->upload(imageRef);
 
-    int NSplat = 32;
-    std::vector<Splat> splats(NSplat);
-
+    int NSplat = 512;
+	std::vector<Splat> splats( NSplat );
+	
     for( int i = 0; i < splats.size(); i++ )
 	{
 		glm::vec3 r0 = glm::vec3( pcg3d( { i, 0, 0xFFFFFFFF } ) ) / glm::vec3( 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF );
@@ -270,8 +270,10 @@ int main() {
 		Splat s;
 		s.pos.x = glm::mix( r0.x, (float)imageRef.width() - 1, r0.x );
 		s.pos.y = glm::mix( r0.y, (float)imageRef.height() - 1, r0.y );
-		s.sx = glm::mix( 4.0f, 8.0f, r1.x );
-		s.sy = glm::mix( 4.0f, 8.0f, r1.y );
+		//s.sx = glm::mix( 4.0f, 8.0f, r1.x );
+		//s.sy = glm::mix( 4.0f, 8.0f, r1.y );
+		s.sx = 4;
+		s.sy = 4;
 		s.rot = glm::pi<float>() * 2.0f * r1.z;
 		s.color = { 0.5f, 0.5f, 0.5f };
 		splats[i] = s;
@@ -281,10 +283,18 @@ int main() {
     float beta2t = 1.0f;
     std::vector<SplatAdam> splatAdams(splats.size());
 
+	beta1t = 1.0f;
+	beta2t = 1.0f;
+	splatAdams.clear();
+	splatAdams.resize( NSplat );
+
 
     ITexture* tex0 = CreateTexture();
-    Image2DRGBA32 image0;
-    image0.allocate(imageRef.width(), imageRef.height());
+	Image2DRGBA32 image0;
+	image0.allocate( imageRef.width(), imageRef.height() );
+
+	Image2DRGBA32 image1;
+	image1.allocate( imageRef.width(), imageRef.height() );
 
     //std::vector<std::vector<int>> indices0(imageRef.width() * imageRef.height());
     //std::vector<int> indices1(imageRef.width() * imageRef.height());
@@ -411,7 +421,7 @@ int main() {
 			glm::vec2 axis1 = eigen1 * sqrt_of_lambda1;
 			DrawEllipse( { s.pos.x, -s.pos.y, 0 }, { axis0.x, -axis0.y, 0.0f }, { axis1.x, -axis1.y, 0.0f }, { 255, 255, 255 } );
 
-            float r = ss_max( sqrt_of_lambda0, sqrt_of_lambda1 ) * 2.0f;
+            float r = ss_max( sqrt_of_lambda0, sqrt_of_lambda1 ) * 3.0f;
 			int begX = s.pos.x - r;
 			int endX = s.pos.x + r;
 			int begY = s.pos.y - r;
@@ -428,14 +438,15 @@ int main() {
 
                     // w as throughput
                     glm::vec4 color = image0( x, y );
-					
+					float T = color.w;
+
 					glm::vec2 p = { x + 0.5f, y + 0.5f };
 					glm::vec2 v = p - s.pos;
 					float alpha = std::expf( -0.5f * glm::dot( v, inv_cov * v ) );
 
-					color.x += color.w * s.color.x * alpha;
-					color.y += color.w * s.color.y * alpha;
-					color.z += color.w * s.color.z * alpha;
+					color.x += T * s.color.x * alpha;
+					color.y += T * s.color.y * alpha;
+					color.z += T * s.color.z * alpha;
 
                     color.w *= ( 1.0f - alpha );
 
@@ -444,12 +455,162 @@ int main() {
 			}
 		}
 
+		// clear throughput
+		for (int i = 0; i < image0.width() * image0.height(); i++)
+		{
+			image0.data()[i].w = 1.0f;
+		}
+
         // backward
+		std::fill( image1.data(), image1.data() + image1.width() * image1.height(), glm::vec4( 0.0f, 0.0f, 0.0f, 1.0f ) );
+		std::vector<Splat> dSplats( splats.size() );
+
+		for( int i = 0; i < splats.size(); i++ )
+		{
+			Splat s = splats[i];
+
+			glm::mat2 cov = cov_of( s );
+
+			float det;
+			float lambda0;
+			float lambda1;
+			eignValues( &lambda0, &lambda1, &det, cov );
+			float sqrt_of_lambda0 = std::sqrtf( lambda0 );
+			float sqrt_of_lambda1 = std::sqrtf( lambda1 );
+
+			glm::mat2 inv_cov =
+				glm::mat2(
+					cov[1][1], -cov[0][1],
+					-cov[1][0], cov[0][0] ) /
+				det;
+
+			glm::vec2 eigen0, eigen1;
+			eigen_vectors_of_cov( &eigen0, &eigen1, cov, lambda0 );
+
+			glm::vec2 axis0 = eigen0 * sqrt_of_lambda0;
+			glm::vec2 axis1 = eigen1 * sqrt_of_lambda1;
+			DrawEllipse( { s.pos.x, -s.pos.y, 0 }, { axis0.x, -axis0.y, 0.0f }, { axis1.x, -axis1.y, 0.0f }, { 255, 255, 255 } );
+
+			float r = ss_max( sqrt_of_lambda0, sqrt_of_lambda1 ) * 3.0f;
+			int begX = s.pos.x - r;
+			int endX = s.pos.x + r;
+			int begY = s.pos.y - r;
+			int endY = s.pos.y + r;
+			for( int y = begY; y <= endY; y++ )
+			{
+				if( y < 0 || image0.height() <= y )
+					continue;
+
+				for( int x = begX; x <= endX; x++ )
+				{
+					if( x < 0 || image0.width() <= x )
+						continue;
+
+					// w as throughput
+					glm::vec4 color = image1( x, y );
+					float T = color.w;
+
+					glm::vec2 p = { x + 0.5f, y + 0.5f };
+					glm::vec2 v = p - s.pos;
+					float alpha = std::expf( -0.5f * glm::dot( v, inv_cov * v ) );
+
+					glm::vec4 finalColor = image0( x, y );
+
+					// dL/dc
+					glm::vec3 dL_dC = glm::vec3( finalColor - imageRef( x, y ) );
+					{
+						float dC_dc = alpha * T /* throughput */;
+						dSplats[i].color += dL_dC * dC_dc;
+					}
+
+					// color accumuration
+					color.x += T * s.color.x * alpha;
+					color.y += T * s.color.y * alpha;
+					color.z += T * s.color.z * alpha;
+
+					glm::vec3 S = finalColor - color;
+					// printf( "%.5f %.5f %.5f\n", S.x / ( 1.0f - alpha ), S.y / ( 1.0f - alpha ), S.z / ( 1.0f - alpha ) );
+					{
+						glm::vec3 dC_dalpha = s.color * T - S / ( 1.0f - alpha );
+						float a = inv_cov[0][0];
+						float b = inv_cov[0][1];
+						float c = inv_cov[1][0];
+						float d = inv_cov[1][1];
+						float dalpha_dx = 0.5f * alpha * ( 2.0f * a * v.x + ( b + c ) * v.y );
+						float dalpha_dy = 0.5f * alpha * ( 2.0f * d * v.y + ( b + c ) * v.x );
+
+						// numerical varidation x this is just for v not mu
+						//float eps = 0.00001f;
+						//float da =
+						//	( std::expf( -0.5f * glm::dot( v + glm::vec2( eps, 0.0f ), inv_cov * (v + glm::vec2( eps, 0.0f )) ) ) - std::expf( -0.5f * glm::dot( v, inv_cov * v ) ) ) / eps;
+						//printf( "%.5f %.5f\n", dalpha_dx, da );
+						
+						// numerical varidation y
+						//float eps = 0.00001f;
+						//float da =
+						//	( std::expf( -0.5f * glm::dot( v + glm::vec2( 0.0f, eps ), inv_cov * ( v + glm::vec2( 0.0f, eps ) ) ) ) - std::expf( -0.5f * glm::dot( v, inv_cov * v ) ) ) / eps;
+						//printf( "%.5f %.5f\n", dalpha_dy, da );
+
+						dSplats[i].pos.x +=
+							dalpha_dx * dC_dalpha.x * dL_dC.x +
+							dalpha_dx * dC_dalpha.y * dL_dC.y +
+							dalpha_dx * dC_dalpha.z * dL_dC.z;
+						dSplats[i].pos.y +=
+							dalpha_dy * dC_dalpha.x * dL_dC.x +
+							dalpha_dy * dC_dalpha.y * dL_dC.y +
+							dalpha_dy * dC_dalpha.z * dL_dC.z;
+					}
+
+					color.w *= ( 1.0f - alpha );
+
+					image1( x, y ) = color;
+				}
+			}
+		}
+
+		// optimize
+		float trainingRate = 0.01f;
+
+		// gradient decent
+		beta1t *= ADAM_BETA1;
+		beta2t *= ADAM_BETA2;
+
+		for( int i = 0; i < splats.size(); i++ )
+		{
+			splats[i].color.x = splatAdams[i].color[0].optimize( splats[i].color.x, dSplats[i].color.x, trainingRate, beta1t, beta2t );
+			splats[i].color.y = splatAdams[i].color[1].optimize( splats[i].color.y, dSplats[i].color.y, trainingRate, beta1t, beta2t );
+			splats[i].color.z = splatAdams[i].color[2].optimize( splats[i].color.z, dSplats[i].color.z, trainingRate, beta1t, beta2t );
+
+			splats[i].pos.x = splatAdams[i].pos[0].optimize( splats[i].pos.x, dSplats[i].pos.x, trainingRate, beta1t, beta2t );
+			splats[i].pos.y = splatAdams[i].pos[1].optimize( splats[i].pos.y, dSplats[i].pos.y, trainingRate, beta1t, beta2t );
+
+			// constraints
+			splats[i].pos.x = glm::clamp( splats[i].pos.x, 0.0f, (float)imageRef.width() - 1 );
+			splats[i].pos.y = glm::clamp( splats[i].pos.y, 0.0f, (float)imageRef.height() - 1 );
+			splats[i].color = glm::clamp( splats[i].color, { 0.0f, 0.0f, 0.0f }, { 1.0f, 1.0f, 1.0f } );
+		}
 
 
-        image0 = image0.map( []( const glm::vec4& c ) { return glm::vec4( c.x, c.y, c.z, 1.0f ); } );
+        // clear throughput
+		for( int i = 0; i < image0.width() * image0.height(); i++ )
+		{
+			image0.data()[i].w = 1.0f;
+			image1.data()[i].w = 1.0f;
+		}
 
         tex0->upload(image0);
+
+		double mse = 0.0;
+		for( int y = 0; y < image0.height(); y++ )
+		{
+			for( int x = 0; x < image0.width(); x++ )
+			{
+				glm::vec3 d = image0( x, y ) - imageRef( x, y );
+				mse += lengthSquared( d * 255.0f );
+			}
+		}
+		mse /= ( image0.height() * image0.width() * 3 );
+
 
         PopGraphicState();
         EndCamera();
@@ -460,6 +621,7 @@ int main() {
         ImGui::SetNextWindowSize({ 600, 800 }, ImGuiCond_Once);
         ImGui::Begin("Panel");
         ImGui::Text("fps = %f", GetFrameRate());
+		ImGui::Text( "mse = %.5f", mse );
 		ImGui::SliderFloat( "sx", &splat_sx, 0, 64 );
 		ImGui::SliderFloat( "sy", &splat_sy, 0, 64 );
 		ImGui::SliderFloat( "rot", &splat_rot, -glm::pi<float>(), glm::pi<float>() );
