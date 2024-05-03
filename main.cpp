@@ -5,6 +5,7 @@
 #include <intrin.h>
 
 #define SPLAT_BOUNDS 3.0f
+#define ALPHA_THRESHOLD ( 1.0f / 256.0f )
 
 uint32_t pcg(uint32_t v)
 {
@@ -481,6 +482,9 @@ int main() {
 					glm::vec2 v = p - s.pos;
 					float alpha = std::expf( -0.5f * glm::dot( v, inv_cov * v ) );
 
+					if( alpha < ALPHA_THRESHOLD )
+						continue;
+
 					color.x += T * s.color.x * alpha;
 					color.y += T * s.color.y * alpha;
 					color.z += T * s.color.z * alpha;
@@ -523,11 +527,8 @@ int main() {
 					-cov[1][0], cov[0][0] ) /
 				det;
 
-			glm::vec2 eigen0, eigen1;
-			eigen_vectors_of_cov( &eigen0, &eigen1, cov, lambda0 );
-
-			glm::vec2 axis0 = eigen0 * sqrt_of_lambda0;
-			glm::vec2 axis1 = eigen1 * sqrt_of_lambda1;
+			float cosTheta = std::cosf( s.rot );
+			float sinTheta = std::sinf( s.rot );
 
 			float r = ss_max( sqrt_of_lambda0, sqrt_of_lambda1 ) * SPLAT_BOUNDS;
 			int begX = s.pos.x - r;
@@ -551,6 +552,9 @@ int main() {
 					glm::vec2 p = { x + 0.5f, y + 0.5f };
 					glm::vec2 v = p - s.pos;
 					float alpha = std::expf( -0.5f * glm::dot( v, inv_cov * v ) );
+
+					if( alpha < ALPHA_THRESHOLD)
+						continue;
 
 					glm::vec4 finalColor = image0( x, y );
 
@@ -600,8 +604,7 @@ int main() {
 
 						float lambda0sq = lambda0 * lambda0;
 						float lambda1sq = lambda1 * lambda1;
-						float cosTheta = std::cosf( s.rot );
-						float sinTheta = std::sinf( s.rot );
+
 						float da_dlambda0 = -1.0f / lambda0sq * cosTheta * cosTheta;
 						float da_dlambda1 = -1.0f / lambda1sq * sinTheta * sinTheta;
 
