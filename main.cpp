@@ -559,6 +559,47 @@ int main() {
 							dalpha_dy * dC_dalpha.x * dL_dC.x +
 							dalpha_dy * dC_dalpha.y * dL_dC.y +
 							dalpha_dy * dC_dalpha.z * dL_dC.z;
+
+						float lambda0sq = lambda0 * lambda0;
+						float lambda1sq = lambda1 * lambda1;
+						float cosTheta = std::cosf( s.rot );
+						float sinTheta = std::sinf( s.rot );
+						float da_dlambda0 = -1.0f / lambda0sq * cosTheta * cosTheta;
+						float da_dlambda1 = -1.0f / lambda1sq * sinTheta * sinTheta;
+
+						float dbc_dlambda0 = -1.0f / lambda0sq * sinTheta * cosTheta;
+						float dbc_dlambda1 = +1.0f / lambda1sq * sinTheta * cosTheta;
+
+						float dd_dlambda0 = -1.0f / lambda0sq * sinTheta * sinTheta;
+						float dd_dlambda1 = -1.0f / lambda1sq * cosTheta * cosTheta;
+
+						float dlambda0_dsx = 2.0f * s.sx;
+						float dlambda1_dsy = 2.0f * s.sy;
+
+						float dalpha_dsx = -0.5f * alpha * ( v.x * v.x * da_dlambda0 + v.x * v.y * dbc_dlambda0 * 2.0f + v.y * v.y * dd_dlambda0 ) * dlambda0_dsx;
+						float dalpha_dsy = -0.5f * alpha * ( v.x * v.x * da_dlambda1 + v.x * v.y * dbc_dlambda1 * 2.0f + v.y * v.y * dd_dlambda1 ) * dlambda1_dsy;
+
+						// numerical varidation
+						//float eps = 0.00001f; 
+						//Splat ds = s;
+						//ds.sx += eps;
+						//float derivative = ( std::expf( -0.5f * glm::dot( v, glm::inverse( cov_of( ds ) ) * v ) ) - alpha ) / eps;
+						//printf( "%f %f\n", dalpha_dsx, derivative );
+
+						//float eps = 0.00001f;
+						//Splat ds = s;
+						//ds.sy += eps;
+						//float derivative = ( std::expf( -0.5f * glm::dot( v, glm::inverse( cov_of( ds ) ) * v ) ) - alpha ) / eps;
+						//printf( "%f %f\n", dalpha_dsy, derivative );
+
+						dSplats[i].sx +=
+							dL_dC.x * dC_dalpha.x * dalpha_dsx +
+							dL_dC.y * dC_dalpha.y * dalpha_dsx +
+							dL_dC.z * dC_dalpha.z * dalpha_dsx;
+						dSplats[i].sy +=
+							dL_dC.x * dC_dalpha.x * dalpha_dsy +
+							dL_dC.y * dC_dalpha.y * dalpha_dsy +
+							dL_dC.z * dC_dalpha.z * dalpha_dsy;
 					}
 
 					color.w *= ( 1.0f - alpha );
@@ -584,9 +625,15 @@ int main() {
 			splats[i].pos.x = splatAdams[i].pos[0].optimize( splats[i].pos.x, dSplats[i].pos.x, trainingRate, beta1t, beta2t );
 			splats[i].pos.y = splatAdams[i].pos[1].optimize( splats[i].pos.y, dSplats[i].pos.y, trainingRate, beta1t, beta2t );
 
+			splats[i].sx = splatAdams[i].pos[0].optimize( splats[i].sx, dSplats[i].sx, trainingRate, beta1t, beta2t );
+			splats[i].sy = splatAdams[i].pos[1].optimize( splats[i].sy, dSplats[i].sy, trainingRate, beta1t, beta2t );
+
 			// constraints
 			splats[i].pos.x = glm::clamp( splats[i].pos.x, 0.0f, (float)imageRef.width() - 1 );
 			splats[i].pos.y = glm::clamp( splats[i].pos.y, 0.0f, (float)imageRef.height() - 1 );
+			splats[i].sx = ss_max( splats[i].sx, 1.0f );
+			splats[i].sy = ss_max( splats[i].sy, 1.0f );
+
 			splats[i].color = glm::clamp( splats[i].color, { 0.0f, 0.0f, 0.0f }, { 1.0f, 1.0f, 1.0f } );
 		}
 
