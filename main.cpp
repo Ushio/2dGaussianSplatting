@@ -267,7 +267,7 @@ int main() {
     Config config;
     config.ScreenWidth = 1920;
     config.ScreenHeight = 1080;
-    config.SwapInterval = 1;
+    config.SwapInterval = 0;
     Initialize(config);
 
     Camera3D camera;
@@ -592,9 +592,12 @@ int main() {
 					color.z += T * s.color.z * alpha;
 
 					glm::vec3 S = finalColor - color;
+					glm::vec3 dC_dalpha = s.color * T - S / ( 1.0f - alpha + 1.0e-15f /* workaround zero div */ );
+					glm::vec3 dL_dalpha = dL_dC * dC_dalpha;
+
 					// printf( "%.5f %.5f %.5f\n", S.x / ( 1.0f - alpha ), S.y / ( 1.0f - alpha ), S.z / ( 1.0f - alpha ) );
 					{
-						glm::vec3 dC_dalpha = s.color * T - S / ( 1.0f - alpha + 1.0e-15f /* workaround zero div */ );
+						
 						float a = inv_cov[0][0];
 						float b = inv_cov[1][0];
 						float c = inv_cov[0][1];
@@ -615,13 +618,13 @@ int main() {
 						//printf( "%.5f %.5f\n", dalpha_dy, da );
 
 						dSplats[i].pos.x +=
-							dalpha_dx * dC_dalpha.x * dL_dC.x +
-							dalpha_dx * dC_dalpha.y * dL_dC.y +
-							dalpha_dx * dC_dalpha.z * dL_dC.z;
+							dL_dalpha.x * dalpha_dx +
+							dL_dalpha.y * dalpha_dx +
+							dL_dalpha.z * dalpha_dx;
 						dSplats[i].pos.y +=
-							dalpha_dy * dC_dalpha.x * dL_dC.x +
-							dalpha_dy * dC_dalpha.y * dL_dC.y +
-							dalpha_dy * dC_dalpha.z * dL_dC.z;
+							dL_dalpha.x * dalpha_dy +
+							dL_dalpha.y * dalpha_dy +
+							dL_dalpha.z * dalpha_dy;
 
 						float lambda0sq = lambda0 * lambda0;
 						float lambda1sq = lambda1 * lambda1;
@@ -663,12 +666,12 @@ int main() {
 						//float derivative = ( exp_approx( -0.5f * glm::dot( v, glm::inverse( cov_of( ds ) ) * v ) ) - alpha ) / eps;
 						//printf( "%f %f\n", dalpha_dsy, derivative );
 
-						float dsx = dL_dC.x * dC_dalpha.x * dalpha_dsx +
-									dL_dC.y * dC_dalpha.y * dalpha_dsx +
-									dL_dC.z * dC_dalpha.z * dalpha_dsx;
-						float dsy = dL_dC.x * dC_dalpha.x * dalpha_dsy +
-									dL_dC.y * dC_dalpha.y * dalpha_dsy +
-									dL_dC.z * dC_dalpha.z * dalpha_dsy;
+						float dsx = dL_dalpha.x * dalpha_dsx +
+									dL_dalpha.y * dalpha_dsx +
+									dL_dalpha.z * dalpha_dsx;
+						float dsy = dL_dalpha.x * dalpha_dsy +
+									dL_dalpha.y * dalpha_dsy +
+									dL_dalpha.z * dalpha_dsy;
 
 						if (is_sxy_flipped(s))
 						{
@@ -691,9 +694,9 @@ int main() {
 							);
 
 						dSplats[i].rot +=
-							dL_dC.x * dC_dalpha.x * dalpha_dtheta +
-							dL_dC.y * dC_dalpha.y * dalpha_dtheta +
-							dL_dC.z * dC_dalpha.z * dalpha_dtheta;
+							dL_dalpha.x * dalpha_dtheta +
+							dL_dalpha.y * dalpha_dtheta +
+							dL_dalpha.z * dalpha_dtheta;
 
 						// numerical varidation
 						//float eps = 0.001f;
