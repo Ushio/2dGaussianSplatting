@@ -147,7 +147,9 @@ struct Adam
 struct SplatAdam
 {
     Adam pos[2];
-    Adam radius;
+	Adam sx;
+	Adam sy;
+	Adam rot;
     Adam color[3];
 };
 
@@ -200,10 +202,21 @@ glm::mat2 rot2d( float rad )
 // \sigma = V * L * V^(-1)
 glm::mat2 cov_of( const Splat& splat )
 {
-	float cosTheta = std::cosf( splat.rot );
-	float sinTheta = std::sinf( splat.rot );
-	float lambda0 = splat.sx * splat.sx;
-	float lambda1 = splat.sy * splat.sy;
+	float theta = splat.rot;
+	float sx = splat.sx;
+	float sy = splat.sy;
+
+	// for consistent order
+	if( splat.sx < splat.sy )
+	{
+		theta += glm::pi<float>();
+		std::swap( sx, sy );
+	}
+
+	float cosTheta = std::cosf( theta );
+	float sinTheta = std::sinf( theta );
+	float lambda0 = sx * sx;
+	float lambda1 = sy * sy;
 	float s11 = lambda0 * cosTheta * cosTheta + lambda1 * sinTheta * sinTheta;
 	float s12 = ( lambda0 - lambda1 ) * sinTheta * cosTheta;
 	return glm::mat2(
@@ -273,7 +286,7 @@ int main() {
 		//s.sx = glm::mix( 4.0f, 8.0f, r1.x );
 		//s.sy = glm::mix( 4.0f, 8.0f, r1.y );
 		s.sx = 4;
-		s.sy = 4;
+		s.sy = 8;
 		s.rot = glm::pi<float>() * 2.0f * r1.z;
 		s.color = { 0.5f, 0.5f, 0.5f };
 		splats[i] = s;
@@ -533,8 +546,8 @@ int main() {
 					{
 						glm::vec3 dC_dalpha = s.color * T - S / ( 1.0f - alpha );
 						float a = inv_cov[0][0];
-						float b = inv_cov[0][1];
-						float c = inv_cov[1][0];
+						float b = inv_cov[1][0];
+						float c = inv_cov[0][1];
 						float d = inv_cov[1][1];
 						float dalpha_dx = 0.5f * alpha * ( 2.0f * a * v.x + ( b + c ) * v.y );
 						float dalpha_dy = 0.5f * alpha * ( 2.0f * d * v.y + ( b + c ) * v.x );
@@ -600,6 +613,38 @@ int main() {
 							dL_dC.x * dC_dalpha.x * dalpha_dsy +
 							dL_dC.y * dC_dalpha.y * dalpha_dsy +
 							dL_dC.z * dC_dalpha.z * dalpha_dsy;
+
+						float da_dtheta = 2.0f * ( lambda0 - lambda1 ) / ( lambda0 * lambda1 ) * sinTheta * cosTheta;
+						float db_dtheta = -( lambda0 - lambda1 ) / ( lambda0 * lambda1 ) * ( cosTheta * cosTheta - sinTheta * sinTheta );
+						float dd_dtheta = -da_dtheta;
+
+						float dalpha_dtheta =
+							-0.5f * alpha * (
+								da_dtheta * v.x * v.x +
+								2.0f * db_dtheta * v.x * v.y + 
+								dd_dtheta * v.y * v.y
+							);
+
+						dSplats[i].rot +=
+							dL_dC.x * dC_dalpha.x * dalpha_dtheta +
+							dL_dC.y * dC_dalpha.y * dalpha_dtheta +
+							dL_dC.z * dC_dalpha.z * dalpha_dtheta;
+
+						// numerical varidation
+						//float eps = 0.001f;
+						//Splat ds = s;
+						//ds.rot += eps;
+						//float derivative = ( std::expf( -0.5f * glm::dot( v, glm::inverse( cov_of( ds ) ) * v ) ) - alpha ) / eps;
+						//printf( "%f %f\n", dalpha_dtheta, derivative );
+
+						//float derivative = ( glm::inverse( cov_of( ds ) )[0][0] - a ) / eps;
+						//printf( "%f %f\n", da_dtheta, derivative );
+
+						//float derivative = ( glm::inverse( cov_of( ds ) )[1][0] - b ) / eps;
+						//printf( "%f %f\n", db_dtheta, derivative );
+
+						//float derivative = ( glm::inverse( cov_of( ds ) )[1][1] - d ) / eps;
+						//printf( "%f %f\n", dd_dtheta, derivative );
 					}
 
 					color.w *= ( 1.0f - alpha );
@@ -625,8 +670,10 @@ int main() {
 			splats[i].pos.x = splatAdams[i].pos[0].optimize( splats[i].pos.x, dSplats[i].pos.x, trainingRate, beta1t, beta2t );
 			splats[i].pos.y = splatAdams[i].pos[1].optimize( splats[i].pos.y, dSplats[i].pos.y, trainingRate, beta1t, beta2t );
 
-			splats[i].sx = splatAdams[i].pos[0].optimize( splats[i].sx, dSplats[i].sx, trainingRate, beta1t, beta2t );
-			splats[i].sy = splatAdams[i].pos[1].optimize( splats[i].sy, dSplats[i].sy, trainingRate, beta1t, beta2t );
+			splats[i].sx = splatAdams[i].sx.optimize( splats[i].sx, dSplats[i].sx, trainingRate, beta1t, beta2t );
+			splats[i].sy = splatAdams[i].sy.optimize( splats[i].sy, dSplats[i].sy, trainingRate, beta1t, beta2t );
+
+			splats[i].rot = splatAdams[i].rot.optimize( splats[i].rot, dSplats[i].rot, trainingRate, beta1t, beta2t );
 
 			// constraints
 			splats[i].pos.x = glm::clamp( splats[i].pos.x, 0.0f, (float)imageRef.width() - 1 );
