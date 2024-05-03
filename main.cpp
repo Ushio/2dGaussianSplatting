@@ -35,6 +35,60 @@ float sign_of(float v)
 {
     return v < 0.0f ? -1.0f : 1.0f;
 }
+template <class T>
+inline T ss_max( T x, T y )
+{
+	return ( x < y ) ? y : x;
+}
+
+template <class T>
+inline T ss_min( T x, T y )
+{
+	return ( y < x ) ? y : x;
+}
+float exp_approx( float x )
+{
+	/*
+	float L = 0.0f;
+	float R = 1.0f;
+	for (int i = 0 ; i < 1000 ; i++)
+	{
+		float m = ( L + R ) * 0.5f;
+		float x = m;
+		x *= x;
+		x *= x;
+		x *= x;
+		x *= x;
+		x *= x;
+		x *= x;
+		x *= x;
+		x *= x;
+		if( x == 0.0f || fpclassify(x) == FP_SUBNORMAL )
+		{
+			L = m;
+		}
+		else
+		{
+			R = m;
+		}
+	}
+	printf( "%.32f\n", R ); >> 0.7109463214874267578125
+	*/
+	x = 1.0f + x / 256.0f;
+	if( x < 0.7109463214874267578125f ) // avoid subnormal
+	{
+		return 0.0f;
+	}
+	x *= x;
+	x *= x;
+	x *= x;
+	x *= x;
+	x *= x;
+	x *= x;
+	x *= x;
+	x *= x;
+	return x;
+}
 
 struct Splat
 {
@@ -156,17 +210,7 @@ struct SplatAdam
     Adam color[3];
 };
 
-template <class T>
-inline T ss_max( T x, T y )
-{
-	return ( x < y ) ? y : x;
-}
 
-template <class T>
-inline T ss_min( T x, T y )
-{
-	return ( y < x ) ? y : x;
-}
 
 // ax^2 + bx + c == 0
 int solve_quadratic( float xs[2], float a, float b, float c )
@@ -489,8 +533,8 @@ int main() {
 
 					glm::vec2 p = { x + 0.5f, y + 0.5f };
 					glm::vec2 v = p - s.pos;
-					float alpha = std::expf( -0.5f * glm::dot( v, inv_cov * v ) );
 
+					float alpha = exp_approx( -0.5f * glm::dot( v, inv_cov * v ) );
 					if( alpha < ALPHA_THRESHOLD )
 						continue;
 
@@ -561,9 +605,8 @@ int main() {
 
 					glm::vec2 p = { x + 0.5f, y + 0.5f };
 					glm::vec2 v = p - s.pos;
-					float alpha = std::expf( -0.5f * glm::dot( v, inv_cov * v ) );
-
-					if( alpha < ALPHA_THRESHOLD)
+					float alpha = exp_approx( -0.5f * glm::dot( v, inv_cov * v ) );
+					if( alpha < ALPHA_THRESHOLD )
 						continue;
 
 					glm::vec4 finalColor = image0( x, y );
@@ -583,7 +626,7 @@ int main() {
 					glm::vec3 S = finalColor - color;
 					// printf( "%.5f %.5f %.5f\n", S.x / ( 1.0f - alpha ), S.y / ( 1.0f - alpha ), S.z / ( 1.0f - alpha ) );
 					{
-						glm::vec3 dC_dalpha = s.color * T - S / ( 1.0f - alpha );
+						glm::vec3 dC_dalpha = s.color * T - S / ( 1.0f - alpha + 1.0e-15f /* workaround zero div */ );
 						float a = inv_cov[0][0];
 						float b = inv_cov[1][0];
 						float c = inv_cov[0][1];
@@ -693,7 +736,7 @@ int main() {
 		}
 
 		// optimize
-		float trainingRate = 0.1f;
+		float trainingRate = 0.05f;
 
 		// gradient decent
 		beta1t *= ADAM_BETA1;
@@ -716,11 +759,46 @@ int main() {
 			// constraints
 			splats[i].pos.x = glm::clamp( splats[i].pos.x, 0.0f, (float)imageRef.width() - 1 );
 			splats[i].pos.y = glm::clamp( splats[i].pos.y, 0.0f, (float)imageRef.height() - 1 );
-			splats[i].sx = ss_max( splats[i].sx, 1.0f );
-			splats[i].sy = ss_max( splats[i].sy, 1.0f );
+			splats[i].sx = glm::clamp( splats[i].sx, 1.0f, 64.0f );
+			splats[i].sy = glm::clamp( splats[i].sy, 1.0f, 64.0f );
 
 			splats[i].color = glm::clamp( splats[i].color, { 0.0f, 0.0f, 0.0f }, { 1.0f, 1.0f, 1.0f } );
 		}
+
+#if 1
+		for (int i = 0; i < splats.size(); i++)
+		{
+			auto s = splats[i];
+			if( isfinite( s.color.x ) == false )
+			{
+				abort();
+			}
+			if( isfinite( s.color.y ) == false )
+			{
+				abort();
+			}
+			if( isfinite( s.color.z ) == false )
+			{
+				abort();
+			}
+			if( isfinite( s.sx ) == false )
+			{
+				abort();
+			}
+			if( isfinite( s.sy ) == false )
+			{
+				abort();
+			}
+			if( isfinite( s.rot ) == false )
+			{
+				abort();
+			}
+			if( isfinite( s.pos.x ) == false )
+			{
+				abort();
+			}
+		}
+#endif
 
         // clear throughput
 		for( int i = 0; i < image0.width() * image0.height(); i++ )
