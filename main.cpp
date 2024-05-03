@@ -141,45 +141,6 @@ float lengthSquared(glm::vec3 v)
 {
     return v.x * v.x + v.y * v.y + v.z * v.z;
 }
-//void drawSplats(pr::Image2DRGBA32* image, std::vector<int>* splatIndices, const std::vector<Splat>& splats, uint32_t perturbIdx, float s)
-//{
-//    int w = image->width();
-//    int h = image->height();
-//    for (int i = 0; i < splats.size(); i++)
-//    {
-//        Splat splat = splats[i];
-//
-//        // Apply perturb
-//        splat = perturb(splat, splatRng(i, perturbIdx), s);
-//
-//        glm::ivec2 lower = glm::ivec2(glm::floor(splat.pos - glm::vec2(splat.radius, splat.radius)));
-//        glm::ivec2 upper = glm::ivec2(glm::ceil(splat.pos + glm::vec2(splat.radius, splat.radius)));
-//
-//        lower = glm::clamp(lower, glm::ivec2(0, 0), glm::ivec2(w - 1, h - 1));
-//        upper = glm::clamp(upper, glm::ivec2(0, 0), glm::ivec2(w - 1, h - 1));
-//
-//        for (int y = lower.y; y <= upper.y; y++)
-//        {
-//            for (int x = lower.x; x <= upper.x; x++)
-//            {
-//                float d2 = lengthSquared(splat.pos - glm::vec2((float)x, (float)y));
-//                if (d2 < splat.radius * splat.radius)
-//                {
-//                    float T = std::expf(-2 * d2 / (splat.radius * splat.radius));
-//                    glm::vec3 c = (*image)(x, y);
-//                    c = glm::mix(c, splat.color, T);
-//                    (*image)(x, y) = glm::vec4(c, 1.0f);
-//
-//                    if (splatIndices)
-//                    {
-//                        splatIndices[y * w + x].push_back(i);
-//                    }
-//                }
-//            }
-//        }
-//    }
-//}
-
 
 const float ADAM_BETA1 = 0.9f;
 const float ADAM_BETA2 = 0.99f;
@@ -782,8 +743,8 @@ int main() {
 			// constraints
 			splats[i].pos.x = glm::clamp( splats[i].pos.x, 0.0f, (float)imageRef.width() - 1 );
 			splats[i].pos.y = glm::clamp( splats[i].pos.y, 0.0f, (float)imageRef.height() - 1 );
-			splats[i].sx = glm::clamp( splats[i].sx, 1.0f, 64.0f );
-			splats[i].sy = glm::clamp( splats[i].sy, 1.0f, 64.0f );
+			splats[i].sx = glm::clamp( splats[i].sx, 1.0f, 1024.0f );
+			splats[i].sy = glm::clamp( splats[i].sy, 1.0f, 1024.0f );
 
 			splats[i].color = glm::clamp( splats[i].color, { 0.0f, 0.0f, 0.0f }, { 1.0f, 1.0f, 1.0f } );
 		}
