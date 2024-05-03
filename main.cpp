@@ -4,6 +4,8 @@
 
 #include <intrin.h>
 
+#define SPLAT_BOUNDS 3.0f
+
 uint32_t pcg(uint32_t v)
 {
     uint32_t state = v * 747796405u + 2891336453u;
@@ -272,7 +274,7 @@ int main() {
 
     textureRef->upload(imageRef);
 
-    int NSplat = 512;
+    int NSplat = 1024;
 	std::vector<Splat> splats( NSplat );
 	
     for( int i = 0; i < splats.size(); i++ )
@@ -285,7 +287,7 @@ int main() {
 		s.pos.y = glm::mix( r0.y, (float)imageRef.height() - 1, r0.y );
 		//s.sx = glm::mix( 4.0f, 8.0f, r1.x );
 		//s.sy = glm::mix( 4.0f, 8.0f, r1.y );
-		s.sx = 4;
+		s.sx = 8;
 		s.sy = 8;
 		s.rot = glm::pi<float>() * 2.0f * r1.z;
 		s.color = { 0.5f, 0.5f, 0.5f };
@@ -344,19 +346,19 @@ int main() {
         // static glm::vec3 begP = { 50, 50, 0 };
 		// static glm::vec3 endP = { 100, 80, 0 };
 
-        static glm::vec3 splat_p = { 50, 50, 0 };
-		static float splat_sx  = 8;
-		static float splat_sy  = 10;
-		static float splat_rot = 0.0f;
+  //      static glm::vec3 splat_p = { 50, 50, 0 };
+		//static float splat_sx  = 8;
+		//static float splat_sy  = 10;
+		//static float splat_rot = 0.0f;
 
-        auto man2d = [camera](glm::vec3* p, float manipulatorSize ) {
-            p->y = -p->y;
-            ManipulatePosition(camera, p, manipulatorSize);
-            p->z = 0.0f;
-            p->y = -p->y;
-        };
-		man2d( &splat_p, 10 );
-		// man2d(&endP, 10);
+  //      auto man2d = [camera](glm::vec3* p, float manipulatorSize ) {
+  //          p->y = -p->y;
+  //          ManipulatePosition(camera, p, manipulatorSize);
+  //          p->z = 0.0f;
+  //          p->y = -p->y;
+  //      };
+		//man2d( &splat_p, 10 );
+		// 
 
         //std::fill( image0.data(), image0.data() + image0.width() * image0.height(), glm::vec4( 0.0f, 0.0f, 0.0f, 1.0f ) );
 		// drawLineDDA( &image0, begP, endP, glm::vec4( 1.0f, 1.0f, 1.0f, 1.0f ) );
@@ -407,6 +409,8 @@ int main() {
 
         std::fill( image0.data(), image0.data() + image0.width() * image0.height(), glm::vec4( 0.0f, 0.0f, 0.0f, 1.0f ) );
 
+		PrimBegin( PrimitiveMode::Lines, 1 );
+
         // forward
         for( int i = 0; i < splats.size(); i++ )
 		{
@@ -430,11 +434,31 @@ int main() {
             glm::vec2 eigen0, eigen1;
 			eigen_vectors_of_cov( &eigen0, &eigen1, cov, lambda0 );
 
-            glm::vec2 axis0 = eigen0 * sqrt_of_lambda0;
-			glm::vec2 axis1 = eigen1 * sqrt_of_lambda1;
-			DrawEllipse( { s.pos.x, -s.pos.y, 0 }, { axis0.x, -axis0.y, 0.0f }, { axis1.x, -axis1.y, 0.0f }, { 255, 255, 255 } );
+			// visuallize
+			{
+				glm::vec2 axis0 = eigen0 * sqrt_of_lambda0;
+				glm::vec2 axis1 = eigen1 * sqrt_of_lambda1;
 
-            float r = ss_max( sqrt_of_lambda0, sqrt_of_lambda1 ) * 3.0f;
+				//Draw axis
+				PrimVertex( glm::vec3( s.pos.x, -s.pos.y, 0 ), { 255, 255, 255 } );
+				PrimVertex( glm::vec3( s.pos.x, -s.pos.y, 0 ) + glm::vec3( axis0.x, -axis0.y, 0 ), { 255, 255, 255 } );
+
+				PrimVertex( glm::vec3( s.pos.x, -s.pos.y, 0 ), { 255, 255, 255 } );
+				PrimVertex( glm::vec3( s.pos.x, -s.pos.y, 0 ) + glm::vec3( axis1.x, -axis1.y, 0 ), { 230, 230, 230 } );
+
+				//Draw Ellipse
+				int nvtx = 16;
+				CircleGenerator circular( glm::pi<float>() * 2.0f / nvtx );
+				glm::uvec3 col = s.color * 255.0f;
+				for( int i = 0; i <= nvtx; i++ )
+				{
+					PrimVertex( glm::vec3( s.pos.x, -s.pos.y, 0 ) + glm::vec3( axis0.x, -axis0.y, 0.0f ) * circular.sin() + glm::vec3( axis1.x, -axis1.y, 0.0f ) * circular.cos(), col );
+					circular.step();
+					PrimVertex( glm::vec3( s.pos.x, -s.pos.y, 0 ) + glm::vec3( axis0.x, -axis0.y, 0.0f ) * circular.sin() + glm::vec3( axis1.x, -axis1.y, 0.0f ) * circular.cos(), col );
+				}
+			}
+
+            float r = ss_max( sqrt_of_lambda0, sqrt_of_lambda1 ) * SPLAT_BOUNDS;
 			int begX = s.pos.x - r;
 			int endX = s.pos.x + r;
 			int begY = s.pos.y - r;
@@ -467,6 +491,8 @@ int main() {
 				}
 			}
 		}
+
+		PrimEnd();
 
 		// clear throughput
 		for (int i = 0; i < image0.width() * image0.height(); i++)
@@ -502,9 +528,8 @@ int main() {
 
 			glm::vec2 axis0 = eigen0 * sqrt_of_lambda0;
 			glm::vec2 axis1 = eigen1 * sqrt_of_lambda1;
-			DrawEllipse( { s.pos.x, -s.pos.y, 0 }, { axis0.x, -axis0.y, 0.0f }, { axis1.x, -axis1.y, 0.0f }, { 255, 255, 255 } );
 
-			float r = ss_max( sqrt_of_lambda0, sqrt_of_lambda1 ) * 3.0f;
+			float r = ss_max( sqrt_of_lambda0, sqrt_of_lambda1 ) * SPLAT_BOUNDS;
 			int begX = s.pos.x - r;
 			int endX = s.pos.x + r;
 			int begY = s.pos.y - r;
@@ -655,7 +680,7 @@ int main() {
 		}
 
 		// optimize
-		float trainingRate = 0.01f;
+		float trainingRate = 0.1f;
 
 		// gradient decent
 		beta1t *= ADAM_BETA1;
@@ -684,7 +709,6 @@ int main() {
 			splats[i].color = glm::clamp( splats[i].color, { 0.0f, 0.0f, 0.0f }, { 1.0f, 1.0f, 1.0f } );
 		}
 
-
         // clear throughput
 		for( int i = 0; i < image0.width() * image0.height(); i++ )
 		{
@@ -712,16 +736,21 @@ int main() {
         BeginImGui();
 
         ImGui::SetNextWindowPos({ 20, 20 }, ImGuiCond_Once);
-        ImGui::SetNextWindowSize({ 600, 800 }, ImGuiCond_Once);
+        ImGui::SetNextWindowSize({ 600, 1000 }, ImGuiCond_Once);
         ImGui::Begin("Panel");
         ImGui::Text("fps = %f", GetFrameRate());
 		ImGui::Text( "mse = %.5f", mse );
-		ImGui::SliderFloat( "sx", &splat_sx, 0, 64 );
-		ImGui::SliderFloat( "sy", &splat_sy, 0, 64 );
-		ImGui::SliderFloat( "rot", &splat_rot, -glm::pi<float>(), glm::pi<float>() );
+		ImGui::Text( "%d splats", NSplat );
+		static int viewScale = 2;
+		ImGui::InputInt( "viewScale", &viewScale );
+		viewScale = ss_max( viewScale, 1 );
+
+		//ImGui::SliderFloat( "sx", &splat_sx, 0, 64 );
+		//ImGui::SliderFloat( "sy", &splat_sy, 0, 64 );
+		//ImGui::SliderFloat( "rot", &splat_rot, -glm::pi<float>(), glm::pi<float>() );
    
-        ImGui::Image(textureRef, ImVec2(textureRef->width() * 2, textureRef->height() * 2));
-        ImGui::Image(tex0, ImVec2(tex0->width() * 2, tex0->height() * 2));
+        ImGui::Image( textureRef, ImVec2( textureRef->width() * viewScale, textureRef->height() * viewScale ) );
+		ImGui::Image( tex0, ImVec2( tex0->width() * viewScale, tex0->height() * viewScale ) );
 
         ImGui::End();
 
