@@ -291,22 +291,28 @@ void drawSplats( pr::Image2DRGBA32* image, std::vector<int>* splatIndices, const
 		int endY = s.pos.y + r;
 		for( int y = begY; y <= endY; y++ )
 		{
-			if( y < 0 || image->height() <= y )
+			if( y < 0 || h <= y )
 				continue;
 
 			for( int x = begX; x <= endX; x++ )
 			{
-				if( x < 0 || image->width() <= x )
+				if( x < 0 || w <= x )
 					continue;
 
 				// w as throughput
 				glm::vec4 color = (*image)( x, y );
 				float T = color.w;
+				if( T < 1.0f / 256.0f )
+					continue;
 
 				glm::vec2 p = { x + 0.5f, y + 0.5f };
 				glm::vec2 v = p - s.pos;
 				
-				float alpha = exp_approx( -0.5f * glm::dot( v, inv_cov * v ) ) * s.opacity;
+				float d2 = glm::dot( v, inv_cov * v );
+				if( SPLAT_BOUNDS * SPLAT_BOUNDS < d2 )
+					continue;
+
+				float alpha = exp_approx( -0.5f * d2 ) * s.opacity;
 				if( alpha < ALPHA_THRESHOLD )
 					continue;
 
@@ -435,7 +441,7 @@ int main() {
 		OPTIMIZER_ANALYTIC = 0,
 		OPTIMIZER_NUMERICAL,
 	};
-	int optimizerMode = OPTIMIZER_ANALYTIC;
+	int optimizerMode = OPTIMIZER_NUMERICAL;
 
     while (pr::NextFrame() == false) {
         if (IsImGuiUsingMouse() == false) {
@@ -859,6 +865,9 @@ int main() {
 			std::vector<Splat> dSplats( splats.size() );
 			std::vector<uint32_t> splatRNGs( splats.size() );
 
+			int w = imageRef.width();
+			int h = imageRef.height();
+
 			for( int i = 0; i < 32; i++ )
 			{
 				// update rngs for each sub iteration
@@ -876,9 +885,9 @@ int main() {
 				drawSplats( &perturb0, indices0.data(), splats, splatRNGs.data(), +1.0f );
 				drawSplats( &perturb1, nullptr        , splats, splatRNGs.data(), -1.0f );
 
-				for( int y = 0; y < imageRef.height(); y++ )
+				for( int y = 0; y < h; y++ )
 				{
-					for( int x = 0; x < imageRef.width(); x++ )
+					for( int x = 0; x < w; x++ )
 					{
 						glm::vec3 d0 = imageRef( x, y ) - perturb0( x, y );
 						glm::vec3 d1 = imageRef( x, y ) - perturb1( x, y );
