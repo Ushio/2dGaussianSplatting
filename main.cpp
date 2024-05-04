@@ -92,37 +92,6 @@ struct Splat
 	float opacity;
 };
 
-#define POS_PURB 0.1f
-#define RADIUS_PURB 0.1f
-#define COLOR_PURB 0.01f
-
-#define RADIUS_MAX 16.0f
-
-enum
-{
-    SIGNBIT_POS_X = 0,
-    SIGNBIT_POS_Y,
-    SIGNBIT_RADIUS,
-    SIGNBIT_COL_R,
-    SIGNBIT_COL_G,
-    SIGNBIT_COL_B,
-};
-
-bool bitAt(uint32_t u, uint32_t i)
-{
-    return u & (1u << i);
-}
-
-// 0: +1, 1: -1
-float signAt(uint32_t u, uint32_t i)
-{
-    return bitAt(u, i) ? -1.0f : 1.0f;
-}
-
-uint32_t splatRng(uint32_t i, uint32_t perturbIdx)
-{
-    return pcg(i + pcg(perturbIdx));
-}
 
 float lengthSquared(glm::vec2 v)
 {
@@ -233,6 +202,131 @@ void eigen_vectors_of_cov( glm::vec2* eigen0, glm::vec2* eigen1, const glm::mat2
 	*eigen1 = e1;
 }
 
+
+// Numerical Differenciate
+#define POS_PURB 0.1f
+#define S_PURB 0.2f
+#define COLOR_PURB 0.01f
+#define ROT_PURB 0.02f
+#define OPACITY_PURB 0.01f
+
+enum
+{
+	SIGNBIT_POS_X = 0,
+	SIGNBIT_POS_Y,
+	SIGNBIT_SX,
+	SIGNBIT_SY,
+	SIGNBIT_ROT,
+	SIGNBIT_COL_R,
+	SIGNBIT_COL_G,
+	SIGNBIT_COL_B,
+	SIGNBIT_OPACITY,
+};
+
+bool bitAt( uint32_t u, uint32_t i )
+{
+	return u & ( 1u << i );
+}
+
+// 0: +1, 1: -1
+float signAt( uint32_t u, uint32_t i )
+{
+	return bitAt( u, i ) ? -1.0f : 1.0f;
+}
+
+uint32_t splatRng( uint32_t i, uint32_t perturbIdx )
+{
+	return pcg( i + pcg( perturbIdx ) );
+}
+
+
+void drawSplats( pr::Image2DRGBA32* image, std::vector<int>* splatIndices, const std::vector<Splat>& splats, const uint32_t* splatRNGs, float sign )
+{
+	int w = image->width();
+	int h = image->height();
+	for( int i = 0; i < splats.size(); i++ )
+	{
+		Splat s = splats[i];
+
+		// Apply perturb
+		uint32_t rng = splatRNGs[i];
+		s.pos.x += sign * POS_PURB * signAt( rng, SIGNBIT_POS_X );
+		s.pos.y += sign * POS_PURB * signAt( rng, SIGNBIT_POS_Y );
+
+		s.sx += sign * S_PURB * signAt( rng, SIGNBIT_SX );
+		s.sy += sign * S_PURB * signAt( rng, SIGNBIT_SY );
+
+		s.rot += sign * ROT_PURB * signAt( rng, SIGNBIT_ROT );
+
+		s.color.x += sign * COLOR_PURB * signAt( rng, SIGNBIT_COL_R );
+		s.color.y += sign * COLOR_PURB * signAt( rng, SIGNBIT_COL_G );
+		s.color.z += sign * COLOR_PURB * signAt( rng, SIGNBIT_COL_B );
+
+		// s.opacity += sign * OPACITY_PURB * signAt( rng, SIGNBIT_OPACITY );
+
+		// constraints
+		s.sx = glm::clamp( s.sx, 1.0f, 1024.0f );
+		s.sy = glm::clamp( s.sy, 1.0f, 1024.0f );
+		s.color = glm::clamp( s.color, { 0.0f, 0.0f, 0.0f }, { 1.0f, 1.0f, 1.0f } );
+
+		glm::mat2 cov = cov_of( s );
+
+		float det;
+		float lambda0;
+		float lambda1;
+		eignValues( &lambda0, &lambda1, &det, cov );
+		float sqrt_of_lambda0 = std::sqrtf( lambda0 );
+		float sqrt_of_lambda1 = std::sqrtf( lambda1 );
+
+		glm::mat2 inv_cov =
+			glm::mat2(
+				cov[1][1], -cov[0][1],
+				-cov[1][0], cov[0][0] ) /
+			det;
+
+		float r = ss_max( sqrt_of_lambda0, sqrt_of_lambda1 ) * SPLAT_BOUNDS;
+		int begX = s.pos.x - r;
+		int endX = s.pos.x + r;
+		int begY = s.pos.y - r;
+		int endY = s.pos.y + r;
+		for( int y = begY; y <= endY; y++ )
+		{
+			if( y < 0 || image->height() <= y )
+				continue;
+
+			for( int x = begX; x <= endX; x++ )
+			{
+				if( x < 0 || image->width() <= x )
+					continue;
+
+				// w as throughput
+				glm::vec4 color = (*image)( x, y );
+				float T = color.w;
+
+				glm::vec2 p = { x + 0.5f, y + 0.5f };
+				glm::vec2 v = p - s.pos;
+				
+				float alpha = exp_approx( -0.5f * glm::dot( v, inv_cov * v ) ) * s.opacity;
+				if( alpha < ALPHA_THRESHOLD )
+					continue;
+
+				color.x += T * s.color.x * alpha;
+				color.y += T * s.color.y * alpha;
+				color.z += T * s.color.z * alpha;
+
+				color.w *= ( 1.0f - alpha );
+
+				( *image )( x, y ) = color;
+
+				if( splatIndices )
+				{
+					splatIndices[y * w + x].push_back( i );
+				}
+			}
+		}
+	}
+}
+
 int main() {
     using namespace pr;
 
@@ -254,7 +348,8 @@ int main() {
     Image2DRGBA32 imageRef;
     {
         Image2DRGBA8 image;
-        image.load("squirrel_cls_mini.jpg");
+		image.load( "squirrel_cls_mini.jpg" );
+		// image.load( "squirrel_cls_micro.jpg" );
         imageRef = Image2DRGBA8_to_Image2DRGBA32(image);
     }
     // std::fill(imageRef.data(), imageRef.data() + imageRef.width() * imageRef.height(), glm::vec4(1.0f, 1.0f, 0.0f, 1.0f));
@@ -269,6 +364,7 @@ int main() {
     textureRef->upload(imageRef);
 
     int NSplat = 1024;
+	// int NSplat = 512;
 	std::vector<Splat> splats( NSplat );
 	
     for( int i = 0; i < splats.size(); i++ )
@@ -281,6 +377,8 @@ int main() {
 		s.pos.y = glm::mix( r0.y, (float)imageRef.height() - 1, r0.y );
 		s.sx = glm::mix( 6.0f, 10.0f, r1.x );
 		s.sy = glm::mix( 6.0f, 10.0f, r1.y );
+		// s.sx = glm::mix( 3.0f, 6.0f, r1.x );
+		// s.sy = glm::mix( 3.0f, 6.0f, r1.y );
 		//s.sx = 8;
 		//s.sy = 8;
 		s.rot = glm::pi<float>() * r1.z;
@@ -310,8 +408,14 @@ int main() {
 
 	bool showSplatInfo = false;
 	bool optimizeOpacity = false;
-    //std::vector<std::vector<int>> indices0(imageRef.width() * imageRef.height());
-    //std::vector<int> indices1(imageRef.width() * imageRef.height());
+
+	ITexture* perturb0Tex = CreateTexture();
+	Image2DRGBA32 perturb0;
+	Image2DRGBA32 perturb1;
+	perturb0.allocate( imageRef.width(), imageRef.height() );
+	perturb1.allocate( imageRef.width(), imageRef.height() );
+
+    std::vector<std::vector<int>> indices0(imageRef.width() * imageRef.height());
 
     // drawSplats(&image0, splats, 0 );
 
@@ -325,6 +429,13 @@ int main() {
     //}
 
     // tex0->upload(image0);
+
+	enum
+	{
+		OPTIMIZER_ANALYTIC = 0,
+		OPTIMIZER_NUMERICAL,
+	};
+	int optimizerMode = OPTIMIZER_ANALYTIC;
 
     while (pr::NextFrame() == false) {
         if (IsImGuiUsingMouse() == false) {
@@ -510,231 +621,381 @@ int main() {
 		}
 
         // backward
-		std::fill( image1.data(), image1.data() + image1.width() * image1.height(), glm::vec4( 0.0f, 0.0f, 0.0f, 1.0f ) );
-		std::vector<Splat> dSplats( splats.size() );
-
-		for( int i = 0; i < splats.size(); i++ )
+		if( optimizerMode == OPTIMIZER_ANALYTIC )
 		{
-			Splat s = splats[i];
+			std::fill( image1.data(), image1.data() + image1.width() * image1.height(), glm::vec4( 0.0f, 0.0f, 0.0f, 1.0f ) );
+			std::vector<Splat> dSplats( splats.size() );
 
-			glm::mat2 cov = cov_of( s );
-
-			float det;
-			float lambda0;
-			float lambda1;
-			eignValues( &lambda0, &lambda1, &det, cov );
-			float sqrt_of_lambda0 = std::sqrtf( lambda0 );
-			float sqrt_of_lambda1 = std::sqrtf( lambda1 );
-
-			glm::mat2 inv_cov =
-				glm::mat2(
-					cov[1][1], -cov[0][1],
-					-cov[1][0], cov[0][0] ) /
-				det;
-
-			float theta = s.rot;
-			float cosTheta = std::cosf( theta );
-			float sinTheta = std::sinf( theta );
-
-			float r = ss_max( sqrt_of_lambda0, sqrt_of_lambda1 ) * SPLAT_BOUNDS;
-			int begX = s.pos.x - r;
-			int endX = s.pos.x + r;
-			int begY = s.pos.y - r;
-			int endY = s.pos.y + r;
-			for( int y = begY; y <= endY; y++ )
+			for( int i = 0; i < splats.size(); i++ )
 			{
-				if( y < 0 || image0.height() <= y )
-					continue;
+				Splat s = splats[i];
 
-				for( int x = begX; x <= endX; x++ )
+				glm::mat2 cov = cov_of( s );
+
+				float det;
+				float lambda0;
+				float lambda1;
+				eignValues( &lambda0, &lambda1, &det, cov );
+				float sqrt_of_lambda0 = std::sqrtf( lambda0 );
+				float sqrt_of_lambda1 = std::sqrtf( lambda1 );
+
+				glm::mat2 inv_cov =
+					glm::mat2(
+						cov[1][1], -cov[0][1],
+						-cov[1][0], cov[0][0] ) /
+					det;
+
+				float theta = s.rot;
+				float cosTheta = std::cosf( theta );
+				float sinTheta = std::sinf( theta );
+
+				float r = ss_max( sqrt_of_lambda0, sqrt_of_lambda1 ) * SPLAT_BOUNDS;
+				int begX = s.pos.x - r;
+				int endX = s.pos.x + r;
+				int begY = s.pos.y - r;
+				int endY = s.pos.y + r;
+				for( int y = begY; y <= endY; y++ )
 				{
-					if( x < 0 || image0.width() <= x )
+					if( y < 0 || image0.height() <= y )
 						continue;
 
-					// w as throughput
-					glm::vec4 color = image1( x, y );
-					float T = color.w;
-
-					glm::vec2 p = { x + 0.5f, y + 0.5f };
-					glm::vec2 v = p - s.pos;
-					float G = exp_approx( -0.5f * glm::dot( v, inv_cov * v ) );
-					float alpha = G * s.opacity;
-					if( alpha < ALPHA_THRESHOLD )
-						continue;
-
-					glm::vec4 finalColor = image0( x, y );
-
-					// dL/dc
-					glm::vec3 dL_dC = glm::vec3( finalColor - imageRef( x, y ) );
+					for( int x = begX; x <= endX; x++ )
 					{
-						float dC_dc = alpha * T /* throughput */;
-						dSplats[i].color += dL_dC * dC_dc;
-					}
+						if( x < 0 || image0.width() <= x )
+							continue;
 
-					// color accumuration
-					color.x += T * s.color.x * alpha;
-					color.y += T * s.color.y * alpha;
-					color.z += T * s.color.z * alpha;
+						// w as throughput
+						glm::vec4 color = image1( x, y );
+						float T = color.w;
 
-					glm::vec3 S = finalColor - color;
-					glm::vec3 dC_dalpha = s.color * T - S / ( 1.0f - alpha + 1.0e-15f /* workaround zero div */ );
-					glm::vec3 dL_dalpha = dL_dC * dC_dalpha;
-					float dL_dalpha_rgb = dL_dalpha.x + dL_dalpha.y + dL_dalpha.z;
+						glm::vec2 p = { x + 0.5f, y + 0.5f };
+						glm::vec2 v = p - s.pos;
+						float G = exp_approx( -0.5f * glm::dot( v, inv_cov * v ) );
+						float alpha = G * s.opacity;
+						if( alpha < ALPHA_THRESHOLD )
+							continue;
 
-					// printf( "%.5f %.5f %.5f\n", S.x / ( 1.0f - alpha ), S.y / ( 1.0f - alpha ), S.z / ( 1.0f - alpha ) );
-					{
+						glm::vec4 finalColor = image0( x, y );
+
+						// dL/dc
+						glm::vec3 dL_dC = glm::vec3( finalColor - imageRef( x, y ) );
+						{
+							float dC_dc = alpha * T /* throughput */;
+							dSplats[i].color += dL_dC * dC_dc;
+						}
+
+						// color accumuration
+						color.x += T * s.color.x * alpha;
+						color.y += T * s.color.y * alpha;
+						color.z += T * s.color.z * alpha;
+
+						glm::vec3 S = finalColor - color;
+						glm::vec3 dC_dalpha = s.color * T - S / ( 1.0f - alpha + 1.0e-15f /* workaround zero div */ );
+						glm::vec3 dL_dalpha = dL_dC * dC_dalpha;
+						float dL_dalpha_rgb = dL_dalpha.x + dL_dalpha.y + dL_dalpha.z;
+
+						// printf( "%.5f %.5f %.5f\n", S.x / ( 1.0f - alpha ), S.y / ( 1.0f - alpha ), S.z / ( 1.0f - alpha ) );
+						{
 						
-						float a = inv_cov[0][0];
-						float b = inv_cov[1][0];
-						float c = inv_cov[0][1];
-						float d = inv_cov[1][1];
-						float dalpha_dx = 0.5f * alpha * ( 2.0f * a * v.x + ( b + c ) * v.y );
-						float dalpha_dy = 0.5f * alpha * ( 2.0f * d * v.y + ( b + c ) * v.x );
+							float a = inv_cov[0][0];
+							float b = inv_cov[1][0];
+							float c = inv_cov[0][1];
+							float d = inv_cov[1][1];
+							float dalpha_dx = 0.5f * alpha * ( 2.0f * a * v.x + ( b + c ) * v.y );
+							float dalpha_dy = 0.5f * alpha * ( 2.0f * d * v.y + ( b + c ) * v.x );
 
-						// numerical varidation x this is just for v not mu
-						//float eps = 0.00001f;
-						//float derivative =
-						//	( s.opacity * std::expf( -0.5f * glm::dot( v + glm::vec2( eps, 0.0f ), inv_cov * ( v + glm::vec2( eps, 0.0f ) ) ) ) - s.opacity * std::expf( -0.5f * glm::dot( v, inv_cov * v ) ) ) / eps;
-						//printf( "%.5f %.5f\n", dalpha_dx, -derivative );
+							// numerical varidation x this is just for v not mu
+							//float eps = 0.00001f;
+							//float derivative =
+							//	( s.opacity * std::expf( -0.5f * glm::dot( v + glm::vec2( eps, 0.0f ), inv_cov * ( v + glm::vec2( eps, 0.0f ) ) ) ) - s.opacity * std::expf( -0.5f * glm::dot( v, inv_cov * v ) ) ) / eps;
+							//printf( "%.5f %.5f\n", dalpha_dx, -derivative );
 						
-						// numerical varidation y
-						//float eps = 0.00001f;
-						//float derivative =
-						//	( s.opacity * std::expf( -0.5f * glm::dot( v + glm::vec2( 0.0f, eps ), inv_cov * ( v + glm::vec2( 0.0f, eps ) ) ) ) - s.opacity * std::expf( -0.5f * glm::dot( v, inv_cov * v ) ) ) / eps;
-						//printf( "%.5f %.5f\n", dalpha_dy, -derivative );
+							// numerical varidation y
+							//float eps = 0.00001f;
+							//float derivative =
+							//	( s.opacity * std::expf( -0.5f * glm::dot( v + glm::vec2( 0.0f, eps ), inv_cov * ( v + glm::vec2( 0.0f, eps ) ) ) ) - s.opacity * std::expf( -0.5f * glm::dot( v, inv_cov * v ) ) ) / eps;
+							//printf( "%.5f %.5f\n", dalpha_dy, -derivative );
 
-						dSplats[i].pos.x += dL_dalpha_rgb * dalpha_dx;
-						dSplats[i].pos.y += dL_dalpha_rgb * dalpha_dy;
+							dSplats[i].pos.x += dL_dalpha_rgb * dalpha_dx;
+							dSplats[i].pos.y += dL_dalpha_rgb * dalpha_dy;
 
-						float dalpha_dsx =
-							alpha / ( s.sx * s.sx * s.sx ) *
-							glm::dot( glm::vec3( cosTheta * cosTheta, 2.0f * sinTheta * cosTheta, sinTheta * sinTheta ), glm::vec3( v.x * v.x, v.x * v.y, v.y * v.y ) );
-						float dalpha_dsy =
-							alpha / ( s.sy * s.sy * s.sy ) *
-							glm::dot( glm::vec3( sinTheta * sinTheta, -2.0f * sinTheta * cosTheta, cosTheta * cosTheta ), glm::vec3( v.x * v.x, v.x * v.y, v.y * v.y ) );
+							float dalpha_dsx =
+								alpha / ( s.sx * s.sx * s.sx ) *
+								glm::dot( glm::vec3( cosTheta * cosTheta, 2.0f * sinTheta * cosTheta, sinTheta * sinTheta ), glm::vec3( v.x * v.x, v.x * v.y, v.y * v.y ) );
+							float dalpha_dsy =
+								alpha / ( s.sy * s.sy * s.sy ) *
+								glm::dot( glm::vec3( sinTheta * sinTheta, -2.0f * sinTheta * cosTheta, cosTheta * cosTheta ), glm::vec3( v.x * v.x, v.x * v.y, v.y * v.y ) );
 
-						// numerical varidation
-						//float eps = 0.0001f; 
-						//Splat ds = s;
-						//ds.sx += eps;
-						//float derivative = ( s.opacity * exp_approx( -0.5f * glm::dot( v, glm::inverse( cov_of( ds ) ) * v ) ) - alpha ) / eps;
-						//printf( "%f %f\n", dalpha_dsx, derivative );
+							// numerical varidation
+							//float eps = 0.0001f; 
+							//Splat ds = s;
+							//ds.sx += eps;
+							//float derivative = ( s.opacity * exp_approx( -0.5f * glm::dot( v, glm::inverse( cov_of( ds ) ) * v ) ) - alpha ) / eps;
+							//printf( "%f %f\n", dalpha_dsx, derivative );
 
-						//float eps = 0.0001f;
-						//Splat ds = s;
-						//ds.sy += eps;
-						//float derivative = ( s.opacity * exp_approx( -0.5f * glm::dot( v, glm::inverse( cov_of( ds ) ) * v ) ) - alpha ) / eps;
-						//printf( "%f %f\n", dalpha_dsy, derivative );
+							//float eps = 0.0001f;
+							//Splat ds = s;
+							//ds.sy += eps;
+							//float derivative = ( s.opacity * exp_approx( -0.5f * glm::dot( v, glm::inverse( cov_of( ds ) ) * v ) ) - alpha ) / eps;
+							//printf( "%f %f\n", dalpha_dsy, derivative );
 
-						dSplats[i].sx += dL_dalpha_rgb * dalpha_dsx;
-						dSplats[i].sy += dL_dalpha_rgb * dalpha_dsy;
+							dSplats[i].sx += dL_dalpha_rgb * dalpha_dsx;
+							dSplats[i].sy += dL_dalpha_rgb * dalpha_dsy;
 
-						float dalpha_dtheta =
-							alpha *
-							( s.sx * s.sx - s.sy * s.sy ) / ( s.sx * s.sx * s.sy * s.sy ) *
-							( ( cosTheta * cosTheta - sinTheta * sinTheta ) * v.x * v.y - sinTheta * cosTheta * ( v.x * v.x - v.y * v.y ) );
+							float dalpha_dtheta =
+								alpha *
+								( s.sx * s.sx - s.sy * s.sy ) / ( s.sx * s.sx * s.sy * s.sy ) *
+								( ( cosTheta * cosTheta - sinTheta * sinTheta ) * v.x * v.y - sinTheta * cosTheta * ( v.x * v.x - v.y * v.y ) );
 
-						dSplats[i].rot += ( dL_dalpha.x + dL_dalpha.y + dL_dalpha.z ) * dalpha_dtheta;
+							dSplats[i].rot += ( dL_dalpha.x + dL_dalpha.y + dL_dalpha.z ) * dalpha_dtheta;
 
-						// numerical varidation
-						//float eps = 0.001f;
-						//Splat ds = s;
-						//ds.rot += eps;
-						//float derivative = ( s.opacity * exp_approx( -0.5f * glm::dot( v, glm::inverse( cov_of( ds ) ) * v ) ) - alpha ) / eps;
-						//printf( "%f %f\n", dalpha_dtheta, derivative );
+							// numerical varidation
+							//float eps = 0.001f;
+							//Splat ds = s;
+							//ds.rot += eps;
+							//float derivative = ( s.opacity * exp_approx( -0.5f * glm::dot( v, glm::inverse( cov_of( ds ) ) * v ) ) - alpha ) / eps;
+							//printf( "%f %f\n", dalpha_dtheta, derivative );
 
-						//float derivative = ( glm::inverse( cov_of( ds ) )[0][0] - a ) / eps;
-						//printf( "%f %f\n", da_dtheta, derivative );
+							//float derivative = ( glm::inverse( cov_of( ds ) )[0][0] - a ) / eps;
+							//printf( "%f %f\n", da_dtheta, derivative );
 
-						//float derivative = ( glm::inverse( cov_of( ds ) )[1][0] - b ) / eps;
-						//printf( "%f %f\n", db_dtheta, derivative );
+							//float derivative = ( glm::inverse( cov_of( ds ) )[1][0] - b ) / eps;
+							//printf( "%f %f\n", db_dtheta, derivative );
 
-						//float derivative = ( glm::inverse( cov_of( ds ) )[1][1] - d ) / eps;
-						//printf( "%f %f\n", dd_dtheta, derivative );
+							//float derivative = ( glm::inverse( cov_of( ds ) )[1][1] - d ) / eps;
+							//printf( "%f %f\n", dd_dtheta, derivative );
 
-						float dalpha_do = G;
-						dSplats[i].opacity += dL_dalpha_rgb * dalpha_do;
+							float dalpha_do = G;
+							dSplats[i].opacity += dL_dalpha_rgb * dalpha_do;
+						}
+
+						color.w *= ( 1.0f - alpha );
+
+						image1( x, y ) = color;
 					}
-
-					color.w *= ( 1.0f - alpha );
-
-					image1( x, y ) = color;
 				}
 			}
-		}
 
-		// optimize
-		float trainingRate = 0.05f;
+			// optimize
+			float trainingRate = 0.05f;
 
-		// gradient decent
-		beta1t *= ADAM_BETA1;
-		beta2t *= ADAM_BETA2;
+			// gradient decent
+			beta1t *= ADAM_BETA1;
+			beta2t *= ADAM_BETA2;
 
-		for( int i = 0; i < splats.size(); i++ )
-		{
-			splats[i].color.x = splatAdams[i].color[0].optimize( splats[i].color.x, dSplats[i].color.x, trainingRate, beta1t, beta2t );
-			splats[i].color.y = splatAdams[i].color[1].optimize( splats[i].color.y, dSplats[i].color.y, trainingRate, beta1t, beta2t );
-			splats[i].color.z = splatAdams[i].color[2].optimize( splats[i].color.z, dSplats[i].color.z, trainingRate, beta1t, beta2t );
-
-			splats[i].pos.x = splatAdams[i].pos[0].optimize( splats[i].pos.x, dSplats[i].pos.x, trainingRate, beta1t, beta2t );
-			splats[i].pos.y = splatAdams[i].pos[1].optimize( splats[i].pos.y, dSplats[i].pos.y, trainingRate, beta1t, beta2t );
-
-			splats[i].sx = splatAdams[i].sx.optimize( splats[i].sx, dSplats[i].sx, trainingRate, beta1t, beta2t );
-			splats[i].sy = splatAdams[i].sy.optimize( splats[i].sy, dSplats[i].sy, trainingRate, beta1t, beta2t );
-
-			splats[i].rot = splatAdams[i].rot.optimize( splats[i].rot, dSplats[i].rot, trainingRate, beta1t, beta2t );
-
-			if( optimizeOpacity )
+			for( int i = 0; i < splats.size(); i++ )
 			{
-				splats[i].opacity = splatAdams[i].opacity.optimize( splats[i].opacity, dSplats[i].opacity, trainingRate, beta1t, beta2t );
+				splats[i].color.x = splatAdams[i].color[0].optimize( splats[i].color.x, dSplats[i].color.x, trainingRate, beta1t, beta2t );
+				splats[i].color.y = splatAdams[i].color[1].optimize( splats[i].color.y, dSplats[i].color.y, trainingRate, beta1t, beta2t );
+				splats[i].color.z = splatAdams[i].color[2].optimize( splats[i].color.z, dSplats[i].color.z, trainingRate, beta1t, beta2t );
+
+				splats[i].pos.x = splatAdams[i].pos[0].optimize( splats[i].pos.x, dSplats[i].pos.x, trainingRate, beta1t, beta2t );
+				splats[i].pos.y = splatAdams[i].pos[1].optimize( splats[i].pos.y, dSplats[i].pos.y, trainingRate, beta1t, beta2t );
+
+				splats[i].sx = splatAdams[i].sx.optimize( splats[i].sx, dSplats[i].sx, trainingRate, beta1t, beta2t );
+				splats[i].sy = splatAdams[i].sy.optimize( splats[i].sy, dSplats[i].sy, trainingRate, beta1t, beta2t );
+
+				splats[i].rot = splatAdams[i].rot.optimize( splats[i].rot, dSplats[i].rot, trainingRate, beta1t, beta2t );
+
+				if( optimizeOpacity )
+				{
+					splats[i].opacity = splatAdams[i].opacity.optimize( splats[i].opacity, dSplats[i].opacity, trainingRate, beta1t, beta2t );
+				}
+
+				// constraints
+				splats[i].pos.x = glm::clamp( splats[i].pos.x, 0.0f, (float)imageRef.width() - 1 );
+				splats[i].pos.y = glm::clamp( splats[i].pos.y, 0.0f, (float)imageRef.height() - 1 );
+
+				splats[i].sx = glm::clamp( splats[i].sx, 1.0f, 1024.0f );
+				splats[i].sy = glm::clamp( splats[i].sy, 1.0f, 1024.0f );
+
+				splats[i].color = glm::clamp( splats[i].color, { 0.0f, 0.0f, 0.0f }, { 1.0f, 1.0f, 1.0f } );
+
+				splats[i].opacity = glm::clamp( splats[i].opacity, 0.1f, 1.0f );
 			}
 
-			// constraints
-			splats[i].pos.x = glm::clamp( splats[i].pos.x, 0.0f, (float)imageRef.width() - 1 );
-			splats[i].pos.y = glm::clamp( splats[i].pos.y, 0.0f, (float)imageRef.height() - 1 );
+	#if 1
+			for (int i = 0; i < splats.size(); i++)
+			{
+				auto s = splats[i];
+				if( isfinite( s.color.x ) == false )
+				{
+					abort();
+				}
+				if( isfinite( s.color.y ) == false )
+				{
+					abort();
+				}
+				if( isfinite( s.color.z ) == false )
+				{
+					abort();
+				}
+				if( isfinite( s.sx ) == false )
+				{
+					abort();
+				}
+				if( isfinite( s.sy ) == false )
+				{
+					abort();
+				}
+				if( isfinite( s.rot ) == false )
+				{
+					abort();
+				}
+				if( isfinite( s.pos.x ) == false )
+				{
+					abort();
+				}
+			}
+	#endif
 
-			splats[i].sx = glm::clamp( splats[i].sx, 1.0f, 1024.0f );
-			splats[i].sy = glm::clamp( splats[i].sy, 1.0f, 1024.0f );
-
-			splats[i].color = glm::clamp( splats[i].color, { 0.0f, 0.0f, 0.0f }, { 1.0f, 1.0f, 1.0f } );
-
-			splats[i].opacity = glm::clamp( splats[i].opacity, 0.1f, 1.0f );
+			iterations++;
 		}
 
+		if( optimizerMode == OPTIMIZER_NUMERICAL )
+		{
+			static int perturbIdx = 0;
+
+			std::vector<Splat> dSplats( splats.size() );
+			std::vector<uint32_t> splatRNGs( splats.size() );
+
+			for( int i = 0; i < 32; i++ )
+			{
+				// update rngs for each sub iteration
+				for( int j = 0; j < splatRNGs.size(); j++ )
+				{
+					splatRNGs[j] = splatRng( j, perturbIdx );
+				}
+
+				std::fill( perturb0.data(), perturb0.data() + perturb0.width() * perturb0.height(), glm::vec4( 0.0f, 0.0f, 0.0f, 1.0f ) );
+				std::fill( perturb1.data(), perturb1.data() + perturb1.width() * perturb1.height(), glm::vec4( 0.0f, 0.0f, 0.0f, 1.0f ) );
+
+				for( int i = 0; i < indices0.size(); i++ )
+					indices0[i].clear();
+
+				drawSplats( &perturb0, indices0.data(), splats, splatRNGs.data(), +1.0f );
+				drawSplats( &perturb1, nullptr        , splats, splatRNGs.data(), -1.0f );
+
+				for( int y = 0; y < imageRef.height(); y++ )
+				{
+					for( int x = 0; x < imageRef.width(); x++ )
+					{
+						glm::vec3 d0 = imageRef( x, y ) - perturb0( x, y );
+						glm::vec3 d1 = imageRef( x, y ) - perturb1( x, y );
+						float fwh0 = lengthSquared( d0 );
+						float fwh1 = lengthSquared( d1 );
+						float df = fwh0 - fwh1;
+
+						for( int i : indices0[y * imageRef.width() + x] )
+						{
+							uint32_t r = splatRNGs[i];
+
+							dSplats[i].pos.x += df * signAt( r, SIGNBIT_POS_X );
+							dSplats[i].pos.y += df * signAt( r, SIGNBIT_POS_Y );
+
+							dSplats[i].sx += df * signAt( r, SIGNBIT_SX );
+							dSplats[i].sy += df * signAt( r, SIGNBIT_SY );
+
+							dSplats[i].rot += df * signAt( r, SIGNBIT_ROT );
+
+							dSplats[i].color.x += df * signAt( r, SIGNBIT_COL_R );
+							dSplats[i].color.y += df * signAt( r, SIGNBIT_COL_G );
+							dSplats[i].color.z += df * signAt( r, SIGNBIT_COL_B );
+
+							//dSplats[i].opacity += df * signAt( r, SIGNBIT_OPACITY );
+						}
+					}
+				}
+
+				perturbIdx++;
+			}
+
+			// gradient decent
+			beta1t *= ADAM_BETA1;
+			beta2t *= ADAM_BETA2;
+
+			float trainingScale = 1.0f;
+			// based on the paper, no div by N, but use purb amount as learning rate.
+
+			for( int i = 0; i < splats.size(); i++ )
+			{
+				splats[i].color.x = splatAdams[i].color[0].optimize( splats[i].color.x, dSplats[i].color.x, COLOR_PURB * trainingScale, beta1t, beta2t );
+				splats[i].color.y = splatAdams[i].color[1].optimize( splats[i].color.y, dSplats[i].color.y, COLOR_PURB * trainingScale, beta1t, beta2t );
+				splats[i].color.z = splatAdams[i].color[2].optimize( splats[i].color.z, dSplats[i].color.z, COLOR_PURB * trainingScale, beta1t, beta2t );
+
+				splats[i].pos.x = splatAdams[i].pos[0].optimize( splats[i].pos.x, dSplats[i].pos.x, POS_PURB * trainingScale, beta1t, beta2t );
+				splats[i].pos.y = splatAdams[i].pos[1].optimize( splats[i].pos.y, dSplats[i].pos.y, POS_PURB * trainingScale, beta1t, beta2t );
+
+				splats[i].sx = splatAdams[i].sx.optimize( splats[i].sx, dSplats[i].sx, S_PURB * trainingScale, beta1t, beta2t );
+				splats[i].sy = splatAdams[i].sy.optimize( splats[i].sy, dSplats[i].sy, S_PURB * trainingScale, beta1t, beta2t );
+
+				splats[i].rot = splatAdams[i].rot.optimize( splats[i].rot, dSplats[i].rot, ROT_PURB * trainingScale, beta1t, beta2t );
+
+				if( optimizeOpacity )
+				{
+					splats[i].opacity = splatAdams[i].opacity.optimize( splats[i].opacity, dSplats[i].opacity, OPACITY_PURB * trainingScale, beta1t, beta2t );
+				}
+
+				// constraints
+				splats[i].pos.x = glm::clamp( splats[i].pos.x, 0.0f, (float)imageRef.width() - 1 );
+				splats[i].pos.y = glm::clamp( splats[i].pos.y, 0.0f, (float)imageRef.height() - 1 );
+
+				splats[i].sx = glm::clamp( splats[i].sx, 1.0f, 1024.0f );
+				splats[i].sy = glm::clamp( splats[i].sy, 1.0f, 1024.0f );
+
+				//float m = sqrtf( splats[i].sx * splats[i].sy );
+				//m = glm::clamp( m, 4.0f, 16.0f );
+				//splats[i].sx = m;
+				//splats[i].sy = m;
+
+				splats[i].color = glm::clamp( splats[i].color, { 0.0f, 0.0f, 0.0f }, { 1.0f, 1.0f, 1.0f } );
+
+				splats[i].opacity = glm::clamp( splats[i].opacity, 0.1f, 1.0f );
+
+			}
 #if 1
-		for (int i = 0; i < splats.size(); i++)
-		{
-			auto s = splats[i];
-			if( isfinite( s.color.x ) == false )
+			for( int i = 0; i < splats.size(); i++ )
 			{
-				abort();
+				auto s = splats[i];
+				if( isfinite( s.color.x ) == false )
+				{
+					abort();
+				}
+				if( isfinite( s.color.y ) == false )
+				{
+					abort();
+				}
+				if( isfinite( s.color.z ) == false )
+				{
+					abort();
+				}
+				if( isfinite( s.sx ) == false )
+				{
+					abort();
+				}
+				if( isfinite( s.sy ) == false )
+				{
+					abort();
+				}
+				if( isfinite( s.rot ) == false )
+				{
+					abort();
+				}
+				if( isfinite( s.pos.x ) == false )
+				{
+					abort();
+				}
 			}
-			if( isfinite( s.color.y ) == false )
-			{
-				abort();
-			}
-			if( isfinite( s.color.z ) == false )
-			{
-				abort();
-			}
-			if( isfinite( s.sx ) == false )
-			{
-				abort();
-			}
-			if( isfinite( s.sy ) == false )
-			{
-				abort();
-			}
-			if( isfinite( s.rot ) == false )
-			{
-				abort();
-			}
-			if( isfinite( s.pos.x ) == false )
-			{
-				abort();
-			}
-		}
 #endif
+
+			for( int i = 0; i < image0.width() * image0.height(); i++ )
+			{
+				perturb0.data()[i].w = 1.0f;
+			}
+			perturb0Tex->upload( perturb0 );
+
+			iterations++;
+		}
 
         // clear throughput
 		for( int i = 0; i < image0.width() * image0.height(); i++ )
@@ -758,8 +1019,6 @@ int main() {
 
 		printf( "%d itr, mse %.4f\n", iterations, mse );
 
-		iterations++;
-
         PopGraphicState();
         EndCamera();
 
@@ -776,6 +1035,9 @@ int main() {
 
 		ImGui::Checkbox( "Optimize opacity", &optimizeOpacity );
 		ImGui::Checkbox( "Show splat info", &showSplatInfo );
+
+		ImGui::RadioButton( "Optimizer Analytic", &optimizerMode, OPTIMIZER_ANALYTIC );
+		ImGui::RadioButton( "Optimizer Numerical", &optimizerMode, OPTIMIZER_NUMERICAL );
 		
 		viewScale = ss_max( viewScale, 1 );
 
@@ -785,7 +1047,8 @@ int main() {
    
         ImGui::Image( textureRef, ImVec2( textureRef->width() * viewScale, textureRef->height() * viewScale ) );
 		ImGui::Image( tex0, ImVec2( tex0->width() * viewScale, tex0->height() * viewScale ) );
-
+		ImGui::Image( perturb0Tex, ImVec2( perturb0Tex->width() * viewScale, perturb0Tex->height() * viewScale ) );
+		
         ImGui::End();
 
         //ImGui::SetNextWindowPos({ 800, 20 }, ImGuiCond_Once);
