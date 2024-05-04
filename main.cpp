@@ -99,6 +99,7 @@ struct Splat
 	float sy;
 	float rot;
     glm::vec3 color;
+	float opacity;
 };
 
 #define POS_PURB 0.1f
@@ -171,6 +172,7 @@ struct SplatAdam
 	Adam sy;
 	Adam rot;
     Adam color[3];
+	Adam opacity;
 };
 
 
@@ -293,6 +295,7 @@ int main() {
 		//s.sy = 8;
 		s.rot = glm::pi<float>() * r1.z;
 		s.color = { 0.5f, 0.5f, 0.5f };
+		s.opacity = 1.0f;
 		splats[i] = s;
 	}
 
@@ -315,6 +318,8 @@ int main() {
 	Image2DRGBA32 image1;
 	image1.allocate( imageRef.width(), imageRef.height() );
 
+	bool showSplatInfo = false;
+	bool optimizeOpacity = false;
     //std::vector<std::vector<int>> indices0(imageRef.width() * imageRef.height());
     //std::vector<int> indices1(imageRef.width() * imageRef.height());
 
@@ -460,6 +465,13 @@ int main() {
 					circular.step();
 					PrimVertex( glm::vec3( s.pos.x, -s.pos.y, 0 ) + glm::vec3( axis0.x, -axis0.y, 0.0f ) * circular.sin() + glm::vec3( axis1.x, -axis1.y, 0.0f ) * circular.cos(), col );
 				}
+
+				if (showSplatInfo)
+				{
+					char op[128];
+					sprintf( op, "o=%.2f, c=(%.2f, %.2f, %.2f)", s.opacity, s.color.x, s.color.y, s.color.z );
+					DrawText( glm::vec3( s.pos.x, -s.pos.y, 0 ), op, 12 );
+				}
 			}
 
             float r = ss_max( sqrt_of_lambda0, sqrt_of_lambda1 ) * SPLAT_BOUNDS;
@@ -484,7 +496,7 @@ int main() {
 					glm::vec2 p = { x + 0.5f, y + 0.5f };
 					glm::vec2 v = p - s.pos;
 
-					float alpha = exp_approx( -0.5f * glm::dot( v, inv_cov * v ) );
+					float alpha = exp_approx( -0.5f * glm::dot( v, inv_cov * v ) ) * s.opacity;
 					if( alpha < ALPHA_THRESHOLD )
 						continue;
 
@@ -555,7 +567,8 @@ int main() {
 
 					glm::vec2 p = { x + 0.5f, y + 0.5f };
 					glm::vec2 v = p - s.pos;
-					float alpha = exp_approx( -0.5f * glm::dot( v, inv_cov * v ) );
+					float G = exp_approx( -0.5f * glm::dot( v, inv_cov * v ) );
+					float alpha = G * s.opacity;
 					if( alpha < ALPHA_THRESHOLD )
 						continue;
 
@@ -589,15 +602,15 @@ int main() {
 
 						// numerical varidation x this is just for v not mu
 						//float eps = 0.00001f;
-						//float da =
-						//	( std::expf( -0.5f * glm::dot( v + glm::vec2( eps, 0.0f ), inv_cov * (v + glm::vec2( eps, 0.0f )) ) ) - std::expf( -0.5f * glm::dot( v, inv_cov * v ) ) ) / eps;
-						//printf( "%.5f %.5f\n", dalpha_dx, da );
+						//float derivative =
+						//	( s.opacity * std::expf( -0.5f * glm::dot( v + glm::vec2( eps, 0.0f ), inv_cov * ( v + glm::vec2( eps, 0.0f ) ) ) ) - s.opacity * std::expf( -0.5f * glm::dot( v, inv_cov * v ) ) ) / eps;
+						//printf( "%.5f %.5f\n", dalpha_dx, -derivative );
 						
 						// numerical varidation y
 						//float eps = 0.00001f;
-						//float da =
-						//	( std::expf( -0.5f * glm::dot( v + glm::vec2( 0.0f, eps ), inv_cov * ( v + glm::vec2( 0.0f, eps ) ) ) ) - std::expf( -0.5f * glm::dot( v, inv_cov * v ) ) ) / eps;
-						//printf( "%.5f %.5f\n", dalpha_dy, da );
+						//float derivative =
+						//	( s.opacity * std::expf( -0.5f * glm::dot( v + glm::vec2( 0.0f, eps ), inv_cov * ( v + glm::vec2( 0.0f, eps ) ) ) ) - s.opacity * std::expf( -0.5f * glm::dot( v, inv_cov * v ) ) ) / eps;
+						//printf( "%.5f %.5f\n", dalpha_dy, -derivative );
 
 						dSplats[i].pos.x += ( dL_dalpha.x + dL_dalpha.y + dL_dalpha.z ) * dalpha_dx;
 						dSplats[i].pos.y += ( dL_dalpha.x + dL_dalpha.y + dL_dalpha.z ) * dalpha_dy;
@@ -613,13 +626,13 @@ int main() {
 						//float eps = 0.0001f; 
 						//Splat ds = s;
 						//ds.sx += eps;
-						//float derivative = ( exp_approx( -0.5f * glm::dot( v, glm::inverse( cov_of( ds ) ) * v ) ) - alpha ) / eps;
+						//float derivative = ( s.opacity * exp_approx( -0.5f * glm::dot( v, glm::inverse( cov_of( ds ) ) * v ) ) - alpha ) / eps;
 						//printf( "%f %f\n", dalpha_dsx, derivative );
 
 						//float eps = 0.0001f;
 						//Splat ds = s;
 						//ds.sy += eps;
-						//float derivative = ( exp_approx( -0.5f * glm::dot( v, glm::inverse( cov_of( ds ) ) * v ) ) - alpha ) / eps;
+						//float derivative = ( s.opacity * exp_approx( -0.5f * glm::dot( v, glm::inverse( cov_of( ds ) ) * v ) ) - alpha ) / eps;
 						//printf( "%f %f\n", dalpha_dsy, derivative );
 
 						dSplats[i].sx += ( dL_dalpha.x + dL_dalpha.y + dL_dalpha.z ) * dalpha_dsx;
@@ -636,7 +649,7 @@ int main() {
 						//float eps = 0.001f;
 						//Splat ds = s;
 						//ds.rot += eps;
-						//float derivative = ( exp_approx( -0.5f * glm::dot( v, glm::inverse( cov_of( ds ) ) * v ) ) - alpha ) / eps;
+						//float derivative = ( s.opacity * exp_approx( -0.5f * glm::dot( v, glm::inverse( cov_of( ds ) ) * v ) ) - alpha ) / eps;
 						//printf( "%f %f\n", dalpha_dtheta, derivative );
 
 						//float derivative = ( glm::inverse( cov_of( ds ) )[0][0] - a ) / eps;
@@ -647,6 +660,9 @@ int main() {
 
 						//float derivative = ( glm::inverse( cov_of( ds ) )[1][1] - d ) / eps;
 						//printf( "%f %f\n", dd_dtheta, derivative );
+
+						float dalpha_do = G;
+						dSplats[i].opacity += ( dL_dalpha.x + dL_dalpha.y + dL_dalpha.z ) * dalpha_do;
 					}
 
 					color.w *= ( 1.0f - alpha );
@@ -677,6 +693,11 @@ int main() {
 
 			splats[i].rot = splatAdams[i].rot.optimize( splats[i].rot, dSplats[i].rot, trainingRate, beta1t, beta2t );
 
+			if( optimizeOpacity )
+			{
+				splats[i].opacity = splatAdams[i].opacity.optimize( splats[i].opacity, dSplats[i].opacity, trainingRate, beta1t, beta2t );
+			}
+
 			// constraints
 			splats[i].pos.x = glm::clamp( splats[i].pos.x, 0.0f, (float)imageRef.width() - 1 );
 			splats[i].pos.y = glm::clamp( splats[i].pos.y, 0.0f, (float)imageRef.height() - 1 );
@@ -685,6 +706,8 @@ int main() {
 			splats[i].sy = glm::clamp( splats[i].sy, 1.0f, 1024.0f );
 
 			splats[i].color = glm::clamp( splats[i].color, { 0.0f, 0.0f, 0.0f }, { 1.0f, 1.0f, 1.0f } );
+
+			splats[i].opacity = glm::clamp( splats[i].opacity, 0.1f, 1.0f );
 		}
 
 #if 1
@@ -759,6 +782,10 @@ int main() {
 		ImGui::Text( "%d splats", NSplat );
 		static int viewScale = 2;
 		ImGui::InputInt( "viewScale", &viewScale );
+
+		ImGui::Checkbox( "Optimize opacity", &optimizeOpacity );
+		ImGui::Checkbox( "Show splat info", &showSplatInfo );
+		
 		viewScale = ss_max( viewScale, 1 );
 
 		//ImGui::SliderFloat( "sx", &splat_sx, 0, 64 );
