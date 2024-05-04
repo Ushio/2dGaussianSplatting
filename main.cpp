@@ -579,6 +579,7 @@ int main() {
 					glm::vec3 S = finalColor - color;
 					glm::vec3 dC_dalpha = s.color * T - S / ( 1.0f - alpha + 1.0e-15f /* workaround zero div */ );
 					glm::vec3 dL_dalpha = dL_dC * dC_dalpha;
+					float dL_dalpha_rgb = dL_dalpha.x + dL_dalpha.y + dL_dalpha.z;
 
 					// printf( "%.5f %.5f %.5f\n", S.x / ( 1.0f - alpha ), S.y / ( 1.0f - alpha ), S.z / ( 1.0f - alpha ) );
 					{
@@ -602,8 +603,8 @@ int main() {
 						//	( s.opacity * std::expf( -0.5f * glm::dot( v + glm::vec2( 0.0f, eps ), inv_cov * ( v + glm::vec2( 0.0f, eps ) ) ) ) - s.opacity * std::expf( -0.5f * glm::dot( v, inv_cov * v ) ) ) / eps;
 						//printf( "%.5f %.5f\n", dalpha_dy, -derivative );
 
-						dSplats[i].pos.x += ( dL_dalpha.x + dL_dalpha.y + dL_dalpha.z ) * dalpha_dx;
-						dSplats[i].pos.y += ( dL_dalpha.x + dL_dalpha.y + dL_dalpha.z ) * dalpha_dy;
+						dSplats[i].pos.x += dL_dalpha_rgb * dalpha_dx;
+						dSplats[i].pos.y += dL_dalpha_rgb * dalpha_dy;
 
 						float dalpha_dsx =
 							alpha / ( s.sx * s.sx * s.sx ) *
@@ -625,8 +626,8 @@ int main() {
 						//float derivative = ( s.opacity * exp_approx( -0.5f * glm::dot( v, glm::inverse( cov_of( ds ) ) * v ) ) - alpha ) / eps;
 						//printf( "%f %f\n", dalpha_dsy, derivative );
 
-						dSplats[i].sx += ( dL_dalpha.x + dL_dalpha.y + dL_dalpha.z ) * dalpha_dsx;
-						dSplats[i].sy += ( dL_dalpha.x + dL_dalpha.y + dL_dalpha.z ) * dalpha_dsy;
+						dSplats[i].sx += dL_dalpha_rgb * dalpha_dsx;
+						dSplats[i].sy += dL_dalpha_rgb * dalpha_dsy;
 
 						float dalpha_dtheta =
 							alpha *
@@ -652,7 +653,7 @@ int main() {
 						//printf( "%f %f\n", dd_dtheta, derivative );
 
 						float dalpha_do = G;
-						dSplats[i].opacity += ( dL_dalpha.x + dL_dalpha.y + dL_dalpha.z ) * dalpha_do;
+						dSplats[i].opacity += dL_dalpha_rgb * dalpha_do;
 					}
 
 					color.w *= ( 1.0f - alpha );
