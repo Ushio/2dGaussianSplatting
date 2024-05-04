@@ -1,6 +1,7 @@
 ﻿#include "pr.hpp"
 #include <iostream>
 #include <memory>
+#include <mutex>
 
 #include <intrin.h>
 
@@ -204,11 +205,11 @@ void eigen_vectors_of_cov( glm::vec2* eigen0, glm::vec2* eigen1, const glm::mat2
 
 
 // Numerical Differenciate
-#define POS_PURB 0.1f
-#define S_PURB 0.2f
-#define COLOR_PURB 0.01f
-#define ROT_PURB 0.02f
-#define OPACITY_PURB 0.01f
+#define POS_PURB 0.01f
+#define S_PURB 0.02f
+#define COLOR_PURB 0.001f
+#define ROT_PURB 0.002f
+#define OPACITY_PURB 0.001f
 
 enum
 {
@@ -420,8 +421,6 @@ int main() {
 	Image2DRGBA32 perturb1;
 	perturb0.allocate( imageRef.width(), imageRef.height() );
 	perturb1.allocate( imageRef.width(), imageRef.height() );
-
-    std::vector<std::vector<int>> indices0(imageRef.width() * imageRef.height());
 
     // drawSplats(&image0, splats, 0 );
 
@@ -861,36 +860,45 @@ int main() {
 		if( optimizerMode == OPTIMIZER_NUMERICAL )
 		{
 			static int perturbIdx = 0;
-
 			std::vector<Splat> dSplats( splats.size() );
-			std::vector<uint32_t> splatRNGs( splats.size() );
+			std::mutex splatMutex;
 
 			int w = imageRef.width();
 			int h = imageRef.height();
 
-			for( int i = 0; i < 32; i++ )
-			{
+			int N = 16;
+			ParallelFor( N, [&]( int i ) {
+				thread_local Image2DRGBA32 image0;
+				thread_local Image2DRGBA32 image1;
+				image0.allocate(imageRef.width(), imageRef.height());
+				image1.allocate(imageRef.width(), imageRef.height());
+				thread_local std::vector<std::vector<int>> indices0;
+				indices0.resize( imageRef.width() * imageRef.height() );
+
+				std::vector<Splat> dSplatsLocal( splats.size() );
+				std::vector<uint32_t> splatRNGs( splats.size() );
+
 				// update rngs for each sub iteration
 				for( int j = 0; j < splatRNGs.size(); j++ )
 				{
-					splatRNGs[j] = splatRng( j, perturbIdx );
+					splatRNGs[j] = splatRng( j, perturbIdx + i );
 				}
 
-				std::fill( perturb0.data(), perturb0.data() + perturb0.width() * perturb0.height(), glm::vec4( 0.0f, 0.0f, 0.0f, 1.0f ) );
-				std::fill( perturb1.data(), perturb1.data() + perturb1.width() * perturb1.height(), glm::vec4( 0.0f, 0.0f, 0.0f, 1.0f ) );
+				std::fill( image0.data(), image0.data() + image0.width() * image0.height(), glm::vec4( 0.0f, 0.0f, 0.0f, 1.0f ) );
+				std::fill( image1.data(), image1.data() + image1.width() * image1.height(), glm::vec4( 0.0f, 0.0f, 0.0f, 1.0f ) );
 
 				for( int i = 0; i < indices0.size(); i++ )
 					indices0[i].clear();
 
-				drawSplats( &perturb0, indices0.data(), splats, splatRNGs.data(), +1.0f );
-				drawSplats( &perturb1, nullptr        , splats, splatRNGs.data(), -1.0f );
+				drawSplats( &image0, indices0.data(), splats, splatRNGs.data(), +1.0f );
+				drawSplats( &image1, nullptr, splats, splatRNGs.data(), -1.0f );
 
 				for( int y = 0; y < h; y++ )
 				{
 					for( int x = 0; x < w; x++ )
 					{
-						glm::vec3 d0 = imageRef( x, y ) - perturb0( x, y );
-						glm::vec3 d1 = imageRef( x, y ) - perturb1( x, y );
+						glm::vec3 d0 = imageRef( x, y ) - image0( x, y );
+						glm::vec3 d1 = imageRef( x, y ) - image1( x, y );
 						float fwh0 = lengthSquared( d0 );
 						float fwh1 = lengthSquared( d1 );
 						float df = fwh0 - fwh1;
@@ -899,31 +907,45 @@ int main() {
 						{
 							uint32_t r = splatRNGs[i];
 
-							dSplats[i].pos.x += df * signAt( r, SIGNBIT_POS_X );
-							dSplats[i].pos.y += df * signAt( r, SIGNBIT_POS_Y );
+							dSplatsLocal[i].pos.x += df * signAt( r, SIGNBIT_POS_X );
+							dSplatsLocal[i].pos.y += df * signAt( r, SIGNBIT_POS_Y );
 
-							dSplats[i].sx += df * signAt( r, SIGNBIT_SX );
-							dSplats[i].sy += df * signAt( r, SIGNBIT_SY );
+							dSplatsLocal[i].sx += df * signAt( r, SIGNBIT_SX );
+							dSplatsLocal[i].sy += df * signAt( r, SIGNBIT_SY );
 
-							dSplats[i].rot += df * signAt( r, SIGNBIT_ROT );
+							dSplatsLocal[i].rot += df * signAt( r, SIGNBIT_ROT );
 
-							dSplats[i].color.x += df * signAt( r, SIGNBIT_COL_R );
-							dSplats[i].color.y += df * signAt( r, SIGNBIT_COL_G );
-							dSplats[i].color.z += df * signAt( r, SIGNBIT_COL_B );
+							dSplatsLocal[i].color.x += df * signAt( r, SIGNBIT_COL_R );
+							dSplatsLocal[i].color.y += df * signAt( r, SIGNBIT_COL_G );
+							dSplatsLocal[i].color.z += df * signAt( r, SIGNBIT_COL_B );
 
 							//dSplats[i].opacity += df * signAt( r, SIGNBIT_OPACITY );
 						}
 					}
 				}
 
-				perturbIdx++;
-			}
+				std::lock_guard<std::mutex> lock(splatMutex);
+				for( int i = 0; i < splats.size(); i++ )
+				{
+					dSplats[i].pos.x += dSplatsLocal[i].pos.x;
+					dSplats[i].pos.y += dSplatsLocal[i].pos.y;
+					dSplats[i].sx += dSplatsLocal[i].sx;
+					dSplats[i].sy += dSplatsLocal[i].sy;
+					dSplats[i].rot += dSplatsLocal[i].rot;
+					dSplats[i].color.x += dSplatsLocal[i].color.x;
+					dSplats[i].color.y += dSplatsLocal[i].color.y;
+					dSplats[i].color.z += dSplatsLocal[i].color.z;
+					dSplats[i].opacity += dSplatsLocal[i].opacity;
+				}
+			} );
+
+			perturbIdx += N;
 
 			// gradient decent
 			beta1t *= ADAM_BETA1;
 			beta2t *= ADAM_BETA2;
 
-			float trainingScale = 1.0f;
+			float trainingScale = 16.0f;
 			// based on the paper, no div by N, but use purb amount as learning rate.
 
 			for( int i = 0; i < splats.size(); i++ )
@@ -996,7 +1018,13 @@ int main() {
 				}
 			}
 #endif
-
+			std::vector<uint32_t> splatRNGs( splats.size() );
+			for( int j = 0; j < splatRNGs.size(); j++ )
+			{
+				splatRNGs[j] = splatRng( j, perturbIdx );
+			}
+			std::fill( perturb0.data(), perturb0.data() + perturb0.width() * perturb0.height(), glm::vec4( 0.0f, 0.0f, 0.0f, 1.0f ) );
+			drawSplats( &perturb0, nullptr, splats, splatRNGs.data(), -1.0f );
 			for( int i = 0; i < image0.width() * image0.height(); i++ )
 			{
 				perturb0.data()[i].w = 1.0f;
