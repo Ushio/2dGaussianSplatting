@@ -5,7 +5,6 @@
 #include <intrin.h>
 
 #define SPLAT_BOUNDS 3.0f
-#define ALPHA_THRESHOLD ( 1.0f / 256.0f )
 #define MIN_THROUGHPUT ( 1.0f / 256.0f )
 
 uint32_t pcg(uint32_t v)
@@ -495,8 +494,10 @@ int main() {
 					glm::vec2 p = { x + 0.5f, y + 0.5f };
 					glm::vec2 v = p - s.pos;
 
-					float alpha = exp_approx( -0.5f * glm::dot( v, inv_cov * v ) ) * s.opacity;
-					if( alpha < ALPHA_THRESHOLD )
+					float d2 = glm::dot( v, inv_cov * v );
+					float alpha = exp_approx( -0.5f * d2 ) * s.opacity;
+
+					if( SPLAT_BOUNDS * SPLAT_BOUNDS < d2 )
 						continue;
 
 					color.x += T * s.color.x * alpha;
@@ -569,9 +570,11 @@ int main() {
 
 					glm::vec2 p = { x + 0.5f, y + 0.5f };
 					glm::vec2 v = p - s.pos;
-					float G = exp_approx( -0.5f * glm::dot( v, inv_cov * v ) );
+					float d2 = glm::dot( v, inv_cov * v );
+					float G = exp_approx( -0.5f * d2 );
 					float alpha = G * s.opacity;
-					if( alpha < ALPHA_THRESHOLD )
+
+					if( SPLAT_BOUNDS * SPLAT_BOUNDS < d2 )
 						continue;
 
 					glm::vec4 finalColor = image0( x, y );
