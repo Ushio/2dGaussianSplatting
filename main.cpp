@@ -48,7 +48,7 @@ inline T ss_min( T x, T y )
 }
 float exp_approx( float x )
 {
-	// return expf( x ); // use this for numerical varidation
+	//return expf( x ); // use this for numerical varidation
 
 	/*
 	float L = 0.0f;
@@ -602,37 +602,19 @@ int main() {
 						dSplats[i].pos.x += ( dL_dalpha.x + dL_dalpha.y + dL_dalpha.z ) * dalpha_dx;
 						dSplats[i].pos.y += ( dL_dalpha.x + dL_dalpha.y + dL_dalpha.z ) * dalpha_dy;
 
-						float lambda0sq = lambda0 * lambda0;
-						float lambda1sq = lambda1 * lambda1;
-
-						float da_dlambda0 = -1.0f / lambda0sq * cosTheta * cosTheta;
-						float da_dlambda1 = -1.0f / lambda1sq * sinTheta * sinTheta;
-
-						float dbc_dlambda0 = -1.0f / lambda0sq * sinTheta * cosTheta;
-						float dbc_dlambda1 = +1.0f / lambda1sq * sinTheta * cosTheta;
-
-						float dd_dlambda0 = -1.0f / lambda0sq * sinTheta * sinTheta;
-						float dd_dlambda1 = -1.0f / lambda1sq * cosTheta * cosTheta;
-
-						float dlambda0_dsx = 2.0f * s.sx;
-						float dlambda1_dsy = 2.0f * s.sy;
-
-						float dalpha_dsx = -0.5f * alpha * ( v.x * v.x * da_dlambda0 + v.x * v.y * dbc_dlambda0 * 2.0f + v.y * v.y * dd_dlambda0 ) * dlambda0_dsx;
-						float dalpha_dsy = -0.5f * alpha * ( v.x * v.x * da_dlambda1 + v.x * v.y * dbc_dlambda1 * 2.0f + v.y * v.y * dd_dlambda1 ) * dlambda1_dsy;
+						float dalpha_dsx =
+							alpha / ( s.sx * s.sx * s.sx ) *
+							glm::dot( glm::vec3( cosTheta * cosTheta, 2.0f * sinTheta * cosTheta, sinTheta * sinTheta ), glm::vec3( v.x * v.x, v.x * v.y, v.y * v.y ) );
+						float dalpha_dsy =
+							alpha / ( s.sy * s.sy * s.sy ) *
+							glm::dot( glm::vec3( sinTheta * sinTheta, -2.0f * sinTheta * cosTheta, cosTheta * cosTheta ), glm::vec3( v.x * v.x, v.x * v.y, v.y * v.y ) );
 
 						// numerical varidation
 						//float eps = 0.0001f; 
 						//Splat ds = s;
-						//if (is_sxy_flipped(s))
-						//{
-						//	ds.sy += eps;
-						//}
-						//else
-						//{
-						//	ds.sx += eps;
-						//}
+						//ds.sx += eps;
 						//float derivative = ( exp_approx( -0.5f * glm::dot( v, glm::inverse( cov_of( ds ) ) * v ) ) - alpha ) / eps;
-						//printf( "%f %f\n", dalpha_dsx, derivative );
+						//printf( "%f %f %f\n", dalpha_dsx, derivative, dalpha_dsx2 );
 
 						//float eps = 0.00001f;
 						//Splat ds = s;
