@@ -287,10 +287,10 @@ int main() {
 		Splat s;
 		s.pos.x = glm::mix( r0.x, (float)imageRef.width() - 1, r0.x );
 		s.pos.y = glm::mix( r0.y, (float)imageRef.height() - 1, r0.y );
-		//s.sx = glm::mix( 4.0f, 8.0f, r1.x );
-		//s.sy = glm::mix( 4.0f, 8.0f, r1.y );
-		s.sx = 8;
-		s.sy = 8; // warning: please make sx larger.
+		s.sx = glm::mix( 6.0f, 10.0f, r1.x );
+		s.sy = glm::mix( 6.0f, 10.0f, r1.y );
+		//s.sx = 8;
+		//s.sy = 8;
 		s.rot = glm::pi<float>() * r1.z;
 		s.color = { 0.5f, 0.5f, 0.5f };
 		splats[i] = s;
@@ -614,9 +614,9 @@ int main() {
 						//Splat ds = s;
 						//ds.sx += eps;
 						//float derivative = ( exp_approx( -0.5f * glm::dot( v, glm::inverse( cov_of( ds ) ) * v ) ) - alpha ) / eps;
-						//printf( "%f %f %f\n", dalpha_dsx, derivative, dalpha_dsx2 );
+						//printf( "%f %f\n", dalpha_dsx, derivative );
 
-						//float eps = 0.00001f;
+						//float eps = 0.0001f;
 						//Splat ds = s;
 						//ds.sy += eps;
 						//float derivative = ( exp_approx( -0.5f * glm::dot( v, glm::inverse( cov_of( ds ) ) * v ) ) - alpha ) / eps;
@@ -625,16 +625,10 @@ int main() {
 						dSplats[i].sx += ( dL_dalpha.x + dL_dalpha.y + dL_dalpha.z ) * dalpha_dsx;
 						dSplats[i].sy += ( dL_dalpha.x + dL_dalpha.y + dL_dalpha.z ) * dalpha_dsy;
 
-						float da_dtheta = 2.0f * ( lambda0 - lambda1 ) / ( lambda0 * lambda1 ) * sinTheta * cosTheta;
-						float db_dtheta = -( lambda0 - lambda1 ) / ( lambda0 * lambda1 ) * ( cosTheta * cosTheta - sinTheta * sinTheta );
-						float dd_dtheta = -da_dtheta;
-
 						float dalpha_dtheta =
-							-0.5f * alpha * (
-								da_dtheta * v.x * v.x +
-								2.0f * db_dtheta * v.x * v.y + 
-								dd_dtheta * v.y * v.y
-							);
+							alpha *
+							( s.sx * s.sx - s.sy * s.sy ) / ( s.sx * s.sx * s.sy * s.sy ) *
+							( ( cosTheta * cosTheta - sinTheta * sinTheta ) * v.x * v.y - sinTheta * cosTheta * ( v.x * v.x - v.y * v.y ) );
 
 						dSplats[i].rot += ( dL_dalpha.x + dL_dalpha.y + dL_dalpha.z ) * dalpha_dtheta;
 
@@ -691,13 +685,6 @@ int main() {
 			splats[i].sy = glm::clamp( splats[i].sy, 1.0f, 1024.0f );
 
 			splats[i].color = glm::clamp( splats[i].color, { 0.0f, 0.0f, 0.0f }, { 1.0f, 1.0f, 1.0f } );
-
-			// lambda consistency for derivative calculations
-			if( splats[i].sx < splats[i].sy )
-			{
-				std::swap( splats[i].sx, splats[i].sy );
-				splats[i].rot += glm::pi<float>() * 0.5f;
-			}
 		}
 
 #if 1
