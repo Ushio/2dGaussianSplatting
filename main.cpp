@@ -60,11 +60,6 @@ float exp_approx( float x )
 		x *= x;
 		x *= x;
 		x *= x;
-		x *= x;
-		x *= x;
-		x *= x;
-		x *= x;
-		x *= x;
 		if( x == 0.0f || fpclassify(x) == FP_SUBNORMAL )
 		{
 			L = m;
@@ -74,18 +69,13 @@ float exp_approx( float x )
 			R = m;
 		}
 	}
-	printf( "%.32f\n", R ); >> 0.7109463214874267578125
+	printf( "%.32f\n", R ); >> 0.00001814586175896693021059036255
 	*/
-	x = 1.0f + x / 256.0f;
-	if( x < 0.7109463214874267578125f ) // avoid subnormal
+	x = 1.0f + x / 8.0f;
+	if( x < 0.00001814586175896693021059036255f ) // avoid subnormal
 	{
 		return 0.0f;
 	}
-	x *= x;
-	x *= x;
-	x *= x;
-	x *= x;
-	x *= x;
 	x *= x;
 	x *= x;
 	x *= x;
