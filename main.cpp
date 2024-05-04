@@ -6,6 +6,7 @@
 
 #define SPLAT_BOUNDS 3.0f
 #define ALPHA_THRESHOLD ( 1.0f / 256.0f )
+#define MIN_THROUGHPUT ( 1.0f / 256.0f )
 
 uint32_t pcg(uint32_t v)
 {
@@ -488,6 +489,9 @@ int main() {
                     glm::vec4 color = image0( x, y );
 					float T = color.w;
 
+					if( T < MIN_THROUGHPUT )
+						continue;
+
 					glm::vec2 p = { x + 0.5f, y + 0.5f };
 					glm::vec2 v = p - s.pos;
 
@@ -559,6 +563,9 @@ int main() {
 					// w as throughput
 					glm::vec4 color = image1( x, y );
 					float T = color.w;
+
+					if( T < MIN_THROUGHPUT )
+						continue;
 
 					glm::vec2 p = { x + 0.5f, y + 0.5f };
 					glm::vec2 v = p - s.pos;
