@@ -270,36 +270,41 @@ int main() {
 
     int NSplat = 1024;
 	std::vector<Splat> splats( NSplat );
-	
-    for( int i = 0; i < splats.size(); i++ )
-	{
-		glm::vec3 r0 = glm::vec3( pcg3d( { i, 0, 0xFFFFFFFF } ) ) / glm::vec3( 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF );
-		glm::vec3 r1 = glm::vec3( pcg3d( { i, 1, 0xFFFFFFFF } ) ) / glm::vec3( 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF );
-
-		Splat s;
-		s.pos.x = glm::mix( r0.x, (float)imageRef.width() - 1, r0.x );
-		s.pos.y = glm::mix( r0.y, (float)imageRef.height() - 1, r0.y );
-		s.sx = glm::mix( 6.0f, 10.0f, r1.x );
-		s.sy = glm::mix( 6.0f, 10.0f, r1.y );
-		//s.sx = 8;
-		//s.sy = 8;
-		s.rot = glm::pi<float>() * r1.z;
-		s.color = { 0.5f, 0.5f, 0.5f };
-		s.opacity = 1.0f;
-		splats[i] = s;
-	}
 
     float beta1t = 1.0f;
     float beta2t = 1.0f;
     std::vector<SplatAdam> splatAdams(splats.size());
 
-	beta1t = 1.0f;
-	beta2t = 1.0f;
-	splatAdams.clear();
-	splatAdams.resize( NSplat );
-
 	int iterations = 0;
 
+	auto init = [&]() {
+		iterations = 0;
+
+		beta1t = 1.0f;
+		beta2t = 1.0f;
+		splatAdams.clear();
+		splatAdams.resize( NSplat );
+
+		for( int i = 0; i < splats.size(); i++ )
+		{
+			glm::vec3 r0 = glm::vec3( pcg3d( { i, 0, 0xFFFFFFFF } ) ) / glm::vec3( 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF );
+			glm::vec3 r1 = glm::vec3( pcg3d( { i, 1, 0xFFFFFFFF } ) ) / glm::vec3( 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF );
+
+			Splat s;
+			s.pos.x = glm::mix( r0.x, (float)imageRef.width() - 1, r0.x );
+			s.pos.y = glm::mix( r0.y, (float)imageRef.height() - 1, r0.y );
+			s.sx = glm::mix( 6.0f, 10.0f, r1.x );
+			s.sy = glm::mix( 6.0f, 10.0f, r1.y );
+			// s.sx = 8;
+			// s.sy = 8;
+			s.rot = glm::pi<float>() * r1.z;
+			s.color = { 0.5f, 0.5f, 0.5f };
+			s.opacity = 1.0f;
+			splats[i] = s;
+		}
+	};
+
+	init();
 
     ITexture* tex0 = CreateTexture();
 	Image2DRGBA32 image0;
@@ -766,7 +771,7 @@ int main() {
         BeginImGui();
 
         ImGui::SetNextWindowPos({ 20, 20 }, ImGuiCond_Once);
-        ImGui::SetNextWindowSize({ 600, 1000 }, ImGuiCond_Once);
+        ImGui::SetNextWindowSize({ 600, 1200 }, ImGuiCond_Once);
         ImGui::Begin("Panel");
         ImGui::Text("fps = %f", GetFrameRate());
 		ImGui::Text( "%d itr, mse %.4f", iterations, mse );
@@ -776,6 +781,11 @@ int main() {
 
 		ImGui::Checkbox( "Optimize opacity", &optimizeOpacity );
 		ImGui::Checkbox( "Show splat info", &showSplatInfo );
+
+		if( ImGui::Button( "Restart" ) )
+		{
+			init();
+		}
 		
 		viewScale = ss_max( viewScale, 1 );
 

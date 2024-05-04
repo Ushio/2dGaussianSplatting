@@ -1,6 +1,6 @@
 ## 2d gaussian splatting for 2d image reconstruction  
 
-<!-- ![demo](demo.png) -->
+![demo](demo.apng)
 
 ## build
 
