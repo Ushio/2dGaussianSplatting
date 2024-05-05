@@ -485,16 +485,28 @@ int main() {
 			}
 
 			// The exact bounding box from covariance matrix
-			float hsize_invCovX = std::sqrt( inv_cov[1][1] * det ) * SPLAT_BOUNDS;
+			// float hsize_invCovX = std::sqrt( inv_cov[1][1] * det ) * SPLAT_BOUNDS;
 			float hsize_invCovY = std::sqrt( inv_cov[0][0] * det ) * SPLAT_BOUNDS;
-			int begX = s.pos.x - hsize_invCovX;
-			int endX = s.pos.x + hsize_invCovX;
 			int begY = s.pos.y - hsize_invCovY;
 			int endY = s.pos.y + hsize_invCovY;
 			for( int y = begY; y <= endY; y++ )
 			{
 				if( y < 0 || image0.height() <= y )
 					continue;
+
+				// Minimum range of x
+				float vy = ( y + 0.5f ) - s.pos.y;
+				float a = inv_cov[0][0];
+				float b = inv_cov[1][0];
+				float d = inv_cov[1][1];
+				float xs[2];
+				int begX = -1;
+				int endX = -1;
+				if( solve_quadratic( xs, a, 2.0f * b * vy, d * vy * vy - SPLAT_BOUNDS * SPLAT_BOUNDS ) )
+				{
+					begX = s.pos.x + xs[0];
+					endX = s.pos.x + xs[1];
+				}
 
 				for( int x = begX; x <= endX; x++ )
 				{
@@ -513,9 +525,6 @@ int main() {
 
 					float d2 = glm::dot( v, inv_cov * v );
 					float alpha = exp_approx( -0.5f * d2 ) * s.opacity;
-
-					if( SPLAT_BOUNDS * SPLAT_BOUNDS < d2 )
-						continue;
 
 					color.x += T * s.color.x * alpha;
 					color.y += T * s.color.y * alpha;
@@ -560,16 +569,28 @@ int main() {
 			float sinTheta = std::sinf( theta );
 
 			// The exact bounding box from covariance matrix
-			float hsize_invCovX = std::sqrt( inv_cov[1][1] * det ) * SPLAT_BOUNDS;
+			// float hsize_invCovX = std::sqrt( inv_cov[1][1] * det ) * SPLAT_BOUNDS;
 			float hsize_invCovY = std::sqrt( inv_cov[0][0] * det ) * SPLAT_BOUNDS;
-			int begX = s.pos.x - hsize_invCovX;
-			int endX = s.pos.x + hsize_invCovX;
 			int begY = s.pos.y - hsize_invCovY;
 			int endY = s.pos.y + hsize_invCovY;
 			for( int y = begY; y <= endY; y++ )
 			{
 				if( y < 0 || image0.height() <= y )
 					continue;
+
+				// Minimum range of x
+				float vy = ( y + 0.5f ) - s.pos.y;
+				float a = inv_cov[0][0];
+				float b = inv_cov[1][0];
+				float d = inv_cov[1][1];
+				float xs[2];
+				int begX = -1;
+				int endX = -1;
+				if( solve_quadratic( xs, a, 2.0f * b * vy, d * vy * vy - SPLAT_BOUNDS * SPLAT_BOUNDS ) )
+				{
+					begX = s.pos.x + xs[0];
+					endX = s.pos.x + xs[1];
+				}
 
 				for( int x = begX; x <= endX; x++ )
 				{
@@ -588,9 +609,6 @@ int main() {
 					float d2 = glm::dot( v, inv_cov * v );
 					float G = exp_approx( -0.5f * d2 );
 					float alpha = G * s.opacity;
-
-					if( SPLAT_BOUNDS * SPLAT_BOUNDS < d2 )
-						continue;
 
 					glm::vec4 finalColor = image0( x, y );
 
