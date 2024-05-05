@@ -461,6 +461,21 @@ int main() {
 					PrimVertex( glm::vec3( s.pos.x, -s.pos.y, 0 ) + glm::vec3( axis0.x, -axis0.y, 0.0f ) * circular.sin() + glm::vec3( axis1.x, -axis1.y, 0.0f ) * circular.cos(), col );
 				}
 
+				// Draw the exact bounding box from covariance matrix
+				float hsize_invCovX = std::sqrt( inv_cov[1][1] * det );
+				float hsize_invCovY = std::sqrt( inv_cov[0][0] * det );
+				glm::vec3 vs[4] = {
+					{ -hsize_invCovX, -hsize_invCovY, 0.0f },
+					{ +hsize_invCovX, -hsize_invCovY, 0.0f },
+					{ +hsize_invCovX, +hsize_invCovY, 0.0f },
+					{ -hsize_invCovX, +hsize_invCovY, 0.0f },
+				};
+				for (int i = 0; i < 4; i++)
+				{
+					PrimVertex( glm::vec3( s.pos.x, -s.pos.y, 0 ) + vs[i], { 128, 128, 128 } );
+					PrimVertex( glm::vec3( s.pos.x, -s.pos.y, 0 ) + vs[( i + 1 ) % 4], { 128, 128, 128 } );
+				}
+
 				if (showSplatInfo)
 				{
 					char op[128];
@@ -469,11 +484,13 @@ int main() {
 				}
 			}
 
-            float r = ss_max( sqrt_of_lambda0, sqrt_of_lambda1 ) * SPLAT_BOUNDS;
-			int begX = s.pos.x - r;
-			int endX = s.pos.x + r;
-			int begY = s.pos.y - r;
-			int endY = s.pos.y + r;
+			// The exact bounding box from covariance matrix
+			float hsize_invCovX = std::sqrt( inv_cov[1][1] * det ) * SPLAT_BOUNDS;
+			float hsize_invCovY = std::sqrt( inv_cov[0][0] * det ) * SPLAT_BOUNDS;
+			int begX = s.pos.x - hsize_invCovX;
+			int endX = s.pos.x + hsize_invCovX;
+			int begY = s.pos.y - hsize_invCovY;
+			int endY = s.pos.y + hsize_invCovY;
 			for( int y = begY; y <= endY; y++ )
 			{
 				if( y < 0 || image0.height() <= y )
@@ -529,13 +546,9 @@ int main() {
 
 			glm::mat2 cov = cov_of( s );
 
-			float det;
-			float lambda0;
-			float lambda1;
-			eignValues( &lambda0, &lambda1, &det, cov );
-			float sqrt_of_lambda0 = std::sqrtf( lambda0 );
-			float sqrt_of_lambda1 = std::sqrtf( lambda1 );
-
+			// det = det(cov) = 1 / det(inv_cov)
+			// sx * sy is an alternative. but leave it as the 3d spatting case can't use original scale in screen space.
+			float det = cov[0][0] * cov[1][1] - cov[1][0] * cov[0][1];
 			glm::mat2 inv_cov =
 				glm::mat2(
 					cov[1][1], -cov[0][1],
@@ -546,11 +559,13 @@ int main() {
 			float cosTheta = std::cosf( theta );
 			float sinTheta = std::sinf( theta );
 
-			float r = ss_max( sqrt_of_lambda0, sqrt_of_lambda1 ) * SPLAT_BOUNDS;
-			int begX = s.pos.x - r;
-			int endX = s.pos.x + r;
-			int begY = s.pos.y - r;
-			int endY = s.pos.y + r;
+			// The exact bounding box from covariance matrix
+			float hsize_invCovX = std::sqrt( inv_cov[1][1] * det ) * SPLAT_BOUNDS;
+			float hsize_invCovY = std::sqrt( inv_cov[0][0] * det ) * SPLAT_BOUNDS;
+			int begX = s.pos.x - hsize_invCovX;
+			int endX = s.pos.x + hsize_invCovX;
+			int begY = s.pos.y - hsize_invCovY;
+			int endY = s.pos.y + hsize_invCovY;
 			for( int y = begY; y <= endY; y++ )
 			{
 				if( y < 0 || image0.height() <= y )
