@@ -760,7 +760,7 @@ int main() {
 		}
 
 		// optimize
-		float trainingRate = 0.01f;
+		float trainingRate = 0.03f;
 
 		// gradient decent
 		beta1t *= ADAM_BETA1;
@@ -804,15 +804,26 @@ int main() {
 			float lambda1_inv;
 			eignValues( &lambda0_inv, &lambda1_inv, &det_of_invcov, inv_cov );
 
-			const float maxPixels = 32.f;
-			const float clampVal = 1.0f / ( maxPixels * maxPixels );
-			if( lambda0_inv < clampVal || lambda1_inv < clampVal )
+			//const float maxPixels = 32.f;
+			//const float clampVal = 1.0f / ( maxPixels * maxPixels );
+			//if( lambda0_inv < clampVal || lambda1_inv < clampVal )
+			//{
+			//	glm::vec2 e0;
+			//	glm::vec2 e1;
+			//	eigenVectors_of_symmetric( &e0, &e1, inv_cov, lambda0_inv );
+			//	splats[i].u = e0 * std::sqrtf( ss_max( lambda0_inv, clampVal ) );
+			//	splats[i].v = e1 * std::sqrtf( ss_max( lambda1_inv, clampVal ) );
+			//}
+			float len0 = std::sqrtf( 1.0f / lambda0_inv ); // L
+			float len1 = std::sqrtf( 1.0f / lambda1_inv ); // S
+			const float maxMul = 8.0f;
+			if( len0 * maxMul < len1 )
 			{
 				glm::vec2 e0;
 				glm::vec2 e1;
 				eigenVectors_of_symmetric( &e0, &e1, inv_cov, lambda0_inv );
-				splats[i].u = e0 * std::sqrtf( ss_max( lambda0_inv, clampVal ) );
-				splats[i].v = e1 * std::sqrtf( ss_max( lambda1_inv, clampVal ) );
+				splats[i].u = e0 * std::sqrtf( lambda0_inv );
+				splats[i].v = e1 / ss_min( len1, len0 * maxMul );
 			}
 
 			splats[i].color = glm::clamp( splats[i].color, { 0.0f, 0.0f, 0.0f }, { 1.0f, 1.0f, 1.0f } );
