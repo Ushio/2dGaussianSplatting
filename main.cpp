@@ -85,9 +85,11 @@ float exp_approx( float x )
 struct Splat
 {
     glm::vec2 pos;
-	float sx;
-	float sy;
-	float rot;
+	glm::vec2 u;
+	glm::vec2 v;
+	//float sx;
+	//float sy;
+	//float rot;
     glm::vec3 color;
 	float opacity;
 };
@@ -158,9 +160,11 @@ struct Adam
 struct SplatAdam
 {
     Adam pos[2];
-	Adam sx;
-	Adam sy;
-	Adam rot;
+	Adam u[2];
+	Adam v[2];
+	//Adam sx;
+	//Adam sy;
+	//Adam rot;
     Adam color[3];
 	Adam opacity;
 };
@@ -203,31 +207,44 @@ glm::mat2 rot2d( float rad )
 };
 
 // \sigma = V * L * V^(-1)
-glm::mat2 cov_of( const Splat& splat )
-{
-	float theta = splat.rot;
-	float sx = splat.sx;
-	float sy = splat.sy;
+//glm::mat2 cov_of( const Splat& splat )
+//{
+//	float theta = splat.rot;
+//	float sx = splat.sx;
+//	float sy = splat.sy;
+//
+//	float cosTheta = std::cosf( theta );
+//	float sinTheta = std::sinf( theta );
+//	float lambda0 = sx * sx;
+//	float lambda1 = sy * sy;
+//	float s11 = lambda0 * cosTheta * cosTheta + lambda1 * sinTheta * sinTheta;
+//	float s12 = ( lambda0 - lambda1 ) * sinTheta * cosTheta;
+//	return glm::mat2(
+//		s11, s12,
+//		s12, lambda0 + lambda1 - s11 );
+//}
 
-	float cosTheta = std::cosf( theta );
-	float sinTheta = std::sinf( theta );
-	float lambda0 = sx * sx;
-	float lambda1 = sy * sy;
-	float s11 = lambda0 * cosTheta * cosTheta + lambda1 * sinTheta * sinTheta;
-	float s12 = ( lambda0 - lambda1 ) * sinTheta * cosTheta;
+glm::mat2 inv_cov_of( const Splat& splat )
+{
+	const glm::vec2& u = splat.u;
+	const glm::vec2& v = splat.v;
+	float a = u.x * u.x + v.x * v.x;
+	float b = u.x * u.y + v.x * v.y;
+	float d = u.y * u.y + v.y * v.y;
 	return glm::mat2(
-		s11, s12,
-		s12, lambda0 + lambda1 - s11 );
+		a, b,
+		b, d );
 }
 
-void eigen_vectors_of_cov( glm::vec2* eigen0, glm::vec2* eigen1, const glm::mat2& cov, float lambda0 /*larger*/ )
+void eigenVectors_of_symmetric( glm::vec2* eigen0, glm::vec2* eigen1, const glm::mat2& m, float lambda )
 {
-	float s11 = cov[0][0];
-	float s22 = cov[1][1];
-	float s12 = cov[1][0];
+	float s11 = m[0][0];
+	float s22 = m[1][1];
+	float s12 = m[1][0];
 
+	// to workaround lambda0 == lambda1
 	float eps = 1e-15f;
-	glm::vec2 e0 = glm::normalize( s11 < s22 ? glm::vec2( s12 + eps, lambda0 - s11 ) : glm::vec2( lambda0 - s22, s12 + eps ) );
+	glm::vec2 e0 = glm::normalize( s11 < s22 ? glm::vec2( s12 + eps, lambda - s11 ) : glm::vec2( lambda - s22, s12 + eps ) );
 	glm::vec2 e1 = { -e0.y, e0.x };
 	*eigen0 = e0;
 	*eigen1 = e1;
@@ -293,11 +310,13 @@ int main() {
 			Splat s;
 			s.pos.x = glm::mix( r0.x, (float)imageRef.width() - 1, r0.x );
 			s.pos.y = glm::mix( r0.y, (float)imageRef.height() - 1, r0.y );
-			s.sx = glm::mix( 6.0f, 10.0f, r1.x );
-			s.sy = glm::mix( 6.0f, 10.0f, r1.y );
+			// s.sx = glm::mix( 6.0f, 10.0f, r1.x );
+			// s.sy = glm::mix( 6.0f, 10.0f, r1.y );
 			// s.sx = 8;
 			// s.sy = 8;
-			s.rot = glm::pi<float>() * r1.z;
+			// s.rot = glm::pi<float>() * r1.z;
+			s.u = glm::vec2( 1.0f, 0.0f ) / glm::mix( 6.0f, 10.0f, r1.x );
+			s.v = glm::vec2( 0.0f, 1.0f ) / glm::mix( 6.0f, 10.0f, r1.y );
 			s.color = { 0.5f, 0.5f, 0.5f };
 			s.opacity = 1.0f;
 			splats[i] = s;
@@ -420,28 +439,37 @@ int main() {
 		{
 			Splat s = splats[i];
 
-            glm::mat2 cov = cov_of( s );
+   //         glm::mat2 cov = cov_of( s );
 
-			float det;
+			//float det;
+			//float lambda0;
+			//float lambda1;
+			//eignValues( &lambda0, &lambda1, &det, cov );
+			//float sqrt_of_lambda0 = std::sqrtf( lambda0 );
+			//float sqrt_of_lambda1 = std::sqrtf( lambda1 );
+
+			//glm::mat2 inv_cov =
+			//	glm::mat2(
+			//		cov[1][1], -cov[0][1],
+			//		-cov[1][0], cov[0][0] ) /
+			//	det; 
+			glm::mat2 inv_cov = inv_cov_of( s );
+
+			float det_of_inv;
 			float lambda0;
 			float lambda1;
-			eignValues( &lambda0, &lambda1, &det, cov );
-			float sqrt_of_lambda0 = std::sqrtf( lambda0 );
-			float sqrt_of_lambda1 = std::sqrtf( lambda1 );
-
-			glm::mat2 inv_cov =
-				glm::mat2(
-					cov[1][1], -cov[0][1],
-					-cov[1][0], cov[0][0] ) /
-				det; 
+			eignValues( &lambda0, &lambda1, &det_of_inv, inv_cov );
 
             glm::vec2 eigen0, eigen1;
-			eigen_vectors_of_cov( &eigen0, &eigen1, cov, lambda0 );
+			eigenVectors_of_symmetric( &eigen0, &eigen1, inv_cov, lambda0 );
 
 			// visuallize
 			{
-				glm::vec2 axis0 = eigen0 * sqrt_of_lambda0;
-				glm::vec2 axis1 = eigen1 * sqrt_of_lambda1;
+				glm::vec2 axis0 = eigen0 / std::sqrtf( lambda0 );
+				glm::vec2 axis1 = eigen1 / std::sqrtf( lambda1 );
+
+				//if( glm::length( axis0 ) < 100 && glm::length( axis1 ) < 100 )
+				//	goto novis;
 
 				//Draw axis
 				PrimVertex( glm::vec3( s.pos.x, -s.pos.y, 0 ), { 255, 255, 255 } );
@@ -449,6 +477,11 @@ int main() {
 
 				PrimVertex( glm::vec3( s.pos.x, -s.pos.y, 0 ), { 255, 255, 255 } );
 				PrimVertex( glm::vec3( s.pos.x, -s.pos.y, 0 ) + glm::vec3( axis1.x, -axis1.y, 0 ), { 230, 230, 230 } );
+				
+				PrimVertex( glm::vec3( s.pos.x, -s.pos.y, 0 ), { 255, 0, 0 } );
+				PrimVertex( glm::vec3( s.pos.x, -s.pos.y, 0 ) + glm::vec3( s.u.x, -s.u.y, 0 ) / glm::dot( s.u, s.u ), { 230, 230, 230 } );
+				PrimVertex( glm::vec3( s.pos.x, -s.pos.y, 0 ), { 0, 255, 0 } );
+				PrimVertex( glm::vec3( s.pos.x, -s.pos.y, 0 ) + glm::vec3( s.v.x, -s.v.y, 0 ) / glm::dot( s.v, s.v ), { 230, 230, 230 } );
 
 				//Draw Ellipse
 				int nvtx = 16;
@@ -462,8 +495,8 @@ int main() {
 				}
 
 				// Draw the exact bounding box from covariance matrix
-				float hsize_invCovX = std::sqrt( inv_cov[1][1] * det );
-				float hsize_invCovY = std::sqrt( inv_cov[0][0] * det );
+				float hsize_invCovX = std::sqrt( inv_cov[1][1] / (det_of_inv + 1.0e-15f) );
+				float hsize_invCovY = std::sqrt( inv_cov[0][0] / (det_of_inv + 1.0e-15f) );
 				glm::vec3 vs[4] = {
 					{ -hsize_invCovX, -hsize_invCovY, 0.0f },
 					{ +hsize_invCovX, -hsize_invCovY, 0.0f },
@@ -482,11 +515,12 @@ int main() {
 					sprintf( op, "o=%.2f, c=(%.2f, %.2f, %.2f)", s.opacity, s.color.x, s.color.y, s.color.z );
 					DrawText( glm::vec3( s.pos.x, -s.pos.y, 0 ), op, 12 );
 				}
+			novis:;
 			}
 
 			// The exact bounding box from covariance matrix
-			// float hsize_invCovX = std::sqrt( inv_cov[1][1] * det ) * SPLAT_BOUNDS;
-			float hsize_invCovY = std::sqrt( inv_cov[0][0] * det ) * SPLAT_BOUNDS;
+			// float hsize_invCovX = std::sqrt( inv_cov[1][1] / (det_of_inv + 1.0e-15f)) * SPLAT_BOUNDS;
+			float hsize_invCovY = std::sqrt( inv_cov[0][0] / ( det_of_inv + 1.0e-15f ) ) * SPLAT_BOUNDS;
 			int begY = s.pos.y - hsize_invCovY;
 			int endY = s.pos.y + hsize_invCovY;
 			for( int y = begY; y <= endY; y++ )
@@ -553,24 +587,29 @@ int main() {
 		{
 			Splat s = splats[i];
 
-			glm::mat2 cov = cov_of( s );
+			// glm::mat2 cov = cov_of( s );
+			glm::mat2 inv_cov = inv_cov_of( s );
 
 			// det = det(cov) = 1 / det(inv_cov)
 			// sx * sy is an alternative. but leave it as the 3d spatting case can't use original scale in screen space.
-			float det = cov[0][0] * cov[1][1] - cov[1][0] * cov[0][1];
-			glm::mat2 inv_cov =
-				glm::mat2(
-					cov[1][1], -cov[0][1],
-					-cov[1][0], cov[0][0] ) /
-				det;
+			//float det = cov[0][0] * cov[1][1] - cov[1][0] * cov[0][1];
+			//glm::mat2 inv_cov =
+			//	glm::mat2(
+			//		cov[1][1], -cov[0][1],
+			//		-cov[1][0], cov[0][0] ) /
+			//	det;
 
-			float theta = s.rot;
-			float cosTheta = std::cosf( theta );
-			float sinTheta = std::sinf( theta );
+			//float theta = s.rot;
+			//float cosTheta = std::cosf( theta );
+			//float sinTheta = std::sinf( theta );
 
 			// The exact bounding box from covariance matrix
-			// float hsize_invCovX = std::sqrt( inv_cov[1][1] * det ) * SPLAT_BOUNDS;
-			float hsize_invCovY = std::sqrt( inv_cov[0][0] * det ) * SPLAT_BOUNDS;
+			//// float hsize_invCovX = std::sqrt( inv_cov[1][1] * det ) * SPLAT_BOUNDS;
+			//float hsize_invCovY = std::sqrt( inv_cov[0][0] * det ) * SPLAT_BOUNDS;
+			float det_of_invcov = inv_cov[0][0] * inv_cov[1][1] - inv_cov[0][1] * inv_cov[1][0];
+			float hsize_invCovX = std::sqrt( inv_cov[1][1] / ( det_of_invcov + 1e-15f ) ) * (float)SPLAT_BOUNDS;
+			float hsize_invCovY = std::sqrt( inv_cov[0][0] / ( det_of_invcov + 1e-15f ) ) * (float)SPLAT_BOUNDS;
+
 			int begY = s.pos.y - hsize_invCovY;
 			int endY = s.pos.y + hsize_invCovY;
 			for( int y = begY; y <= endY; y++ )
@@ -654,12 +693,19 @@ int main() {
 						dSplats[i].pos.x += dL_dalpha_rgb * dalpha_dx;
 						dSplats[i].pos.y += dL_dalpha_rgb * dalpha_dy;
 
-						float dalpha_dsx =
-							alpha / ( s.sx * s.sx * s.sx ) *
-							glm::dot( glm::vec3( cosTheta * cosTheta, 2.0f * sinTheta * cosTheta, sinTheta * sinTheta ), glm::vec3( v.x * v.x, v.x * v.y, v.y * v.y ) );
-						float dalpha_dsy =
-							alpha / ( s.sy * s.sy * s.sy ) *
-							glm::dot( glm::vec3( sinTheta * sinTheta, -2.0f * sinTheta * cosTheta, cosTheta * cosTheta ), glm::vec3( v.x * v.x, v.x * v.y, v.y * v.y ) );
+						// vectors
+						glm::vec2 da_du = - alpha * v * glm::dot( v, s.u );
+						glm::vec2 da_dv = - alpha * v * glm::dot( v, s.v );
+						dSplats[i].u += dL_dalpha_rgb * da_du;
+						dSplats[i].v += dL_dalpha_rgb * da_dv;
+
+						// rotation
+						//float dalpha_dsx =
+						//	alpha / ( s.sx * s.sx * s.sx ) *
+						//	glm::dot( glm::vec3( cosTheta * cosTheta, 2.0f * sinTheta * cosTheta, sinTheta * sinTheta ), glm::vec3( v.x * v.x, v.x * v.y, v.y * v.y ) );
+						//float dalpha_dsy =
+						//	alpha / ( s.sy * s.sy * s.sy ) *
+						//	glm::dot( glm::vec3( sinTheta * sinTheta, -2.0f * sinTheta * cosTheta, cosTheta * cosTheta ), glm::vec3( v.x * v.x, v.x * v.y, v.y * v.y ) );
 
 						// numerical varidation
 						//float eps = 0.0001f; 
@@ -674,15 +720,17 @@ int main() {
 						//float derivative = ( s.opacity * exp_approx( -0.5f * glm::dot( v, glm::inverse( cov_of( ds ) ) * v ) ) - alpha ) / eps;
 						//printf( "%f %f\n", dalpha_dsy, derivative );
 
-						dSplats[i].sx += dL_dalpha_rgb * dalpha_dsx;
-						dSplats[i].sy += dL_dalpha_rgb * dalpha_dsy;
+						// scale
+						//dSplats[i].sx += dL_dalpha_rgb * dalpha_dsx;
+						//dSplats[i].sy += dL_dalpha_rgb * dalpha_dsy;
 
-						float dalpha_dtheta =
-							alpha *
-							( s.sx * s.sx - s.sy * s.sy ) / ( s.sx * s.sx * s.sy * s.sy ) *
-							( ( cosTheta * cosTheta - sinTheta * sinTheta ) * v.x * v.y - sinTheta * cosTheta * ( v.x * v.x - v.y * v.y ) );
+						//float dalpha_dtheta =
+						//	alpha *
+						//	( s.sx * s.sx - s.sy * s.sy ) / ( s.sx * s.sx * s.sy * s.sy ) *
+						//	( ( cosTheta * cosTheta - sinTheta * sinTheta ) * v.x * v.y - sinTheta * cosTheta * ( v.x * v.x - v.y * v.y ) );
 
-						dSplats[i].rot += ( dL_dalpha.x + dL_dalpha.y + dL_dalpha.z ) * dalpha_dtheta;
+						//dSplats[i].rot += ( dL_dalpha.x + dL_dalpha.y + dL_dalpha.z ) * dalpha_dtheta;
+
 
 						// numerical varidation
 						//float eps = 0.001f;
@@ -712,7 +760,7 @@ int main() {
 		}
 
 		// optimize
-		float trainingRate = 0.05f;
+		float trainingRate = 0.01f;
 
 		// gradient decent
 		beta1t *= ADAM_BETA1;
@@ -727,10 +775,16 @@ int main() {
 			splats[i].pos.x = splatAdams[i].pos[0].optimize( splats[i].pos.x, dSplats[i].pos.x, trainingRate, beta1t, beta2t );
 			splats[i].pos.y = splatAdams[i].pos[1].optimize( splats[i].pos.y, dSplats[i].pos.y, trainingRate, beta1t, beta2t );
 
-			splats[i].sx = splatAdams[i].sx.optimize( splats[i].sx, dSplats[i].sx, trainingRate, beta1t, beta2t );
-			splats[i].sy = splatAdams[i].sy.optimize( splats[i].sy, dSplats[i].sy, trainingRate, beta1t, beta2t );
 
-			splats[i].rot = splatAdams[i].rot.optimize( splats[i].rot, dSplats[i].rot, trainingRate, beta1t, beta2t );
+			splats[i].u.x = splatAdams[i].u[0].optimize( splats[i].u.x, dSplats[i].u.x, trainingRate, beta1t, beta2t );
+			splats[i].u.y = splatAdams[i].u[1].optimize( splats[i].u.y, dSplats[i].u.y, trainingRate, beta1t, beta2t );
+			splats[i].v.x = splatAdams[i].v[0].optimize( splats[i].v.x, dSplats[i].v.x, trainingRate, beta1t, beta2t );
+			splats[i].v.y = splatAdams[i].v[1].optimize( splats[i].v.y, dSplats[i].v.y, trainingRate, beta1t, beta2t );
+
+			//splats[i].sx = splatAdams[i].sx.optimize( splats[i].sx, dSplats[i].sx, trainingRate, beta1t, beta2t );
+			//splats[i].sy = splatAdams[i].sy.optimize( splats[i].sy, dSplats[i].sy, trainingRate, beta1t, beta2t );
+
+			//splats[i].rot = splatAdams[i].rot.optimize( splats[i].rot, dSplats[i].rot, trainingRate, beta1t, beta2t );
 
 			if( optimizeOpacity )
 			{
@@ -741,8 +795,25 @@ int main() {
 			splats[i].pos.x = glm::clamp( splats[i].pos.x, 0.0f, (float)imageRef.width() - 1 );
 			splats[i].pos.y = glm::clamp( splats[i].pos.y, 0.0f, (float)imageRef.height() - 1 );
 
-			splats[i].sx = glm::clamp( splats[i].sx, 1.0f, 1024.0f );
-			splats[i].sy = glm::clamp( splats[i].sy, 1.0f, 1024.0f );
+			//splats[i].sx = glm::clamp( splats[i].sx, 1.0f, 1024.0f );
+			//splats[i].sy = glm::clamp( splats[i].sy, 1.0f, 1024.0f );
+
+			auto inv_cov = inv_cov_of( splats[i] );
+			float det_of_invcov;
+			float lambda0_inv;
+			float lambda1_inv;
+			eignValues( &lambda0_inv, &lambda1_inv, &det_of_invcov, inv_cov );
+
+			const float maxPixels = 32.f;
+			const float clampVal = 1.0f / ( maxPixels * maxPixels );
+			if( lambda0_inv < clampVal || lambda1_inv < clampVal )
+			{
+				glm::vec2 e0;
+				glm::vec2 e1;
+				eigenVectors_of_symmetric( &e0, &e1, inv_cov, lambda0_inv );
+				splats[i].u = e0 * std::sqrtf( ss_max( lambda0_inv, clampVal ) );
+				splats[i].v = e1 * std::sqrtf( ss_max( lambda1_inv, clampVal ) );
+			}
 
 			splats[i].color = glm::clamp( splats[i].color, { 0.0f, 0.0f, 0.0f }, { 1.0f, 1.0f, 1.0f } );
 
@@ -765,18 +836,18 @@ int main() {
 			{
 				abort();
 			}
-			if( isfinite( s.sx ) == false )
-			{
-				abort();
-			}
-			if( isfinite( s.sy ) == false )
-			{
-				abort();
-			}
-			if( isfinite( s.rot ) == false )
-			{
-				abort();
-			}
+			//if( isfinite( s.sx ) == false )
+			//{
+			//	abort();
+			//}
+			//if( isfinite( s.sy ) == false )
+			//{
+			//	abort();
+			//}
+			//if( isfinite( s.rot ) == false )
+			//{
+			//	abort();
+			//}
 			if( isfinite( s.pos.x ) == false )
 			{
 				abort();
