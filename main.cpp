@@ -226,11 +226,12 @@ glm::mat2 rot2d( float rad )
 
 glm::mat2 inv_cov_of( const Splat& splat )
 {
+	const float E = 0.001f;
 	const glm::vec2& u = splat.u;
 	const glm::vec2& v = splat.v;
-	float a = u.x * u.x + v.x * v.x;
+	float a = u.x * u.x + v.x * v.x + E;
 	float b = u.x * u.y + v.x * v.y;
-	float d = u.y * u.y + v.y * v.y;
+	float d = u.y * u.y + v.y * v.y + E;
 	return glm::mat2(
 		a, b,
 		b, d );
@@ -478,10 +479,10 @@ int main() {
 				PrimVertex( glm::vec3( s.pos.x, -s.pos.y, 0 ), { 255, 255, 255 } );
 				PrimVertex( glm::vec3( s.pos.x, -s.pos.y, 0 ) + glm::vec3( axis1.x, -axis1.y, 0 ), { 230, 230, 230 } );
 				
-				PrimVertex( glm::vec3( s.pos.x, -s.pos.y, 0 ), { 255, 0, 0 } );
-				PrimVertex( glm::vec3( s.pos.x, -s.pos.y, 0 ) + glm::vec3( s.u.x, -s.u.y, 0 ) / glm::dot( s.u, s.u ), { 230, 230, 230 } );
-				PrimVertex( glm::vec3( s.pos.x, -s.pos.y, 0 ), { 0, 255, 0 } );
-				PrimVertex( glm::vec3( s.pos.x, -s.pos.y, 0 ) + glm::vec3( s.v.x, -s.v.y, 0 ) / glm::dot( s.v, s.v ), { 230, 230, 230 } );
+				//PrimVertex( glm::vec3( s.pos.x, -s.pos.y, 0 ), { 255, 0, 0 } );
+				//PrimVertex( glm::vec3( s.pos.x, -s.pos.y, 0 ) + glm::vec3( s.u.x, -s.u.y, 0 ) / glm::dot( s.u, s.u ), { 230, 230, 230 } );
+				//PrimVertex( glm::vec3( s.pos.x, -s.pos.y, 0 ), { 0, 255, 0 } );
+				//PrimVertex( glm::vec3( s.pos.x, -s.pos.y, 0 ) + glm::vec3( s.v.x, -s.v.y, 0 ) / glm::dot( s.v, s.v ), { 230, 230, 230 } );
 
 				//Draw Ellipse
 				int nvtx = 16;
@@ -798,11 +799,11 @@ int main() {
 			//splats[i].sx = glm::clamp( splats[i].sx, 1.0f, 1024.0f );
 			//splats[i].sy = glm::clamp( splats[i].sy, 1.0f, 1024.0f );
 
-			auto inv_cov = inv_cov_of( splats[i] );
-			float det_of_invcov;
-			float lambda0_inv;
-			float lambda1_inv;
-			eignValues( &lambda0_inv, &lambda1_inv, &det_of_invcov, inv_cov );
+			//auto inv_cov = inv_cov_of( splats[i] );
+			//float det_of_invcov;
+			//float lambda0_inv;
+			//float lambda1_inv;
+			//eignValues( &lambda0_inv, &lambda1_inv, &det_of_invcov, inv_cov );
 
 			//const float maxPixels = 32.f;
 			//const float clampVal = 1.0f / ( maxPixels * maxPixels );
@@ -814,17 +815,17 @@ int main() {
 			//	splats[i].u = e0 * std::sqrtf( ss_max( lambda0_inv, clampVal ) );
 			//	splats[i].v = e1 * std::sqrtf( ss_max( lambda1_inv, clampVal ) );
 			//}
-			float len0 = std::sqrtf( 1.0f / lambda0_inv ); // L
-			float len1 = std::sqrtf( 1.0f / lambda1_inv ); // S
-			const float maxMul = 8.0f;
-			if( len0 * maxMul < len1 )
-			{
-				glm::vec2 e0;
-				glm::vec2 e1;
-				eigenVectors_of_symmetric( &e0, &e1, inv_cov, lambda0_inv );
-				splats[i].u = e0 * std::sqrtf( lambda0_inv );
-				splats[i].v = e1 / ss_min( len1, len0 * maxMul );
-			}
+			//float len0 = std::sqrtf( 1.0f / lambda0_inv ); // L
+			//float len1 = std::sqrtf( 1.0f / lambda1_inv ); // S
+			//const float maxMul = 8.0f;
+			//if( len0 * maxMul < len1 )
+			//{
+			//	glm::vec2 e0;
+			//	glm::vec2 e1;
+			//	eigenVectors_of_symmetric( &e0, &e1, inv_cov, lambda0_inv );
+			//	splats[i].u = e0 * std::sqrtf( lambda0_inv );
+			//	splats[i].v = e1 / ss_min( len1, len0 * maxMul );
+			//}
 
 			splats[i].color = glm::clamp( splats[i].color, { 0.0f, 0.0f, 0.0f }, { 1.0f, 1.0f, 1.0f } );
 
