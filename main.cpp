@@ -224,9 +224,9 @@ glm::mat2 rot2d( float rad )
 //		s12, lambda0 + lambda1 - s11 );
 //}
 
-glm::mat2 inv_cov_of( const Splat& splat )
+
+glm::mat2 inv_cov_of( const Splat& splat, float E )
 {
-	const float E = 0.001f;
 	const glm::vec2& u = splat.u;
 	const glm::vec2& v = splat.v;
 	float a = u.x * u.x + v.x * v.x + E;
@@ -292,6 +292,10 @@ int main() {
     float beta1t = 1.0f;
     float beta2t = 1.0f;
     std::vector<SplatAdam> splatAdams(splats.size());
+	Adam EpAdam = {};
+
+	const bool trainableE = true;
+	float Ep = 1.0f;
 
 	int iterations = 0;
 
@@ -302,6 +306,8 @@ int main() {
 		beta2t = 1.0f;
 		splatAdams.clear();
 		splatAdams.resize( NSplat );
+
+		Ep = 1.0f;
 
 		for( int i = 0; i < splats.size(); i++ )
 		{
@@ -316,8 +322,17 @@ int main() {
 			// s.sx = 8;
 			// s.sy = 8;
 			// s.rot = glm::pi<float>() * r1.z;
-			s.u = glm::vec2( 1.0f, 0.0f ) / glm::mix( 6.0f, 10.0f, r1.x );
-			s.v = glm::vec2( 0.0f, 1.0f ) / glm::mix( 6.0f, 10.0f, r1.y );
+			
+			if (trainableE)
+			{
+				s.u = glm::vec2( 1.0f, 0.0f );
+				s.v = glm::vec2( 0.0f, 1.0f );
+			}
+			else
+			{
+				s.u = glm::vec2( 1.0f, 0.0f ) / glm::mix( 6.0f, 10.0f, r1.x );
+				s.v = glm::vec2( 0.0f, 1.0f ) / glm::mix( 6.0f, 10.0f, r1.y );
+			}
 			s.color = { 0.5f, 0.5f, 0.5f };
 			s.opacity = 1.0f;
 			splats[i] = s;
@@ -436,6 +451,7 @@ int main() {
 		PrimBegin( PrimitiveMode::Lines, 1 );
 
         // forward
+		const float E = trainableE ? std::expf( -Ep ) : 0.001f;
         for( int i = 0; i < splats.size(); i++ )
 		{
 			Splat s = splats[i];
@@ -454,7 +470,7 @@ int main() {
 			//		cov[1][1], -cov[0][1],
 			//		-cov[1][0], cov[0][0] ) /
 			//	det; 
-			glm::mat2 inv_cov = inv_cov_of( s );
+			glm::mat2 inv_cov = inv_cov_of( s, E );
 
 			float det_of_inv;
 			float lambda0;
@@ -583,13 +599,14 @@ int main() {
         // backward
 		std::fill( image1.data(), image1.data() + image1.width() * image1.height(), glm::vec4( 0.0f, 0.0f, 0.0f, 1.0f ) );
 		std::vector<Splat> dSplats( splats.size() );
-
+		float dEp = 0.0f;
+		float dE_dEp = -std::expf( -Ep );
 		for( int i = 0; i < splats.size(); i++ )
 		{
 			Splat s = splats[i];
 
 			// glm::mat2 cov = cov_of( s );
-			glm::mat2 inv_cov = inv_cov_of( s );
+			glm::mat2 inv_cov = inv_cov_of( s, E );
 
 			// det = det(cov) = 1 / det(inv_cov)
 			// sx * sy is an alternative. but leave it as the 3d spatting case can't use original scale in screen space.
@@ -700,6 +717,22 @@ int main() {
 						dSplats[i].u += dL_dalpha_rgb * da_du;
 						dSplats[i].v += dL_dalpha_rgb * da_dv;
 
+						if( trainableE )
+						{
+							float dalpha_dE = -0.5f * alpha * glm::dot( v, v );
+							float dalpha_dep = dalpha_dE * dE_dEp;
+							dEp += dL_dalpha_rgb * dalpha_dep;
+						}
+
+						 // numerical varidation
+						//float prevEp = Ep; 
+						//float eps = 0.001f;
+						//Splat ds = s;
+						//Ep += eps;
+						//float derivative = ( s.opacity * exp_approx( -0.5f * glm::dot( v, inv_cov_of( ds ) * v ) ) - alpha ) / eps;
+						//Ep = prevEp;
+						//printf( "%f %f\n", dalpha_dep, derivative );
+
 						// rotation
 						//float dalpha_dsx =
 						//	alpha / ( s.sx * s.sx * s.sx ) *
@@ -766,6 +799,8 @@ int main() {
 		// gradient decent
 		beta1t *= ADAM_BETA1;
 		beta2t *= ADAM_BETA2;
+
+		Ep = EpAdam.optimize( Ep, dEp, trainingRate, beta1t, beta2t );
 
 		for( int i = 0; i < splats.size(); i++ )
 		{
@@ -908,6 +943,11 @@ int main() {
 		ImGui::Checkbox( "Optimize opacity", &optimizeOpacity );
 		ImGui::Checkbox( "Show splat info", &showSplatInfo );
 
+		if( trainableE )
+		{
+			ImGui::Text( "Ep %f", Ep );
+		}
+		
 		if( ImGui::Button( "Restart" ) )
 		{
 			init();
