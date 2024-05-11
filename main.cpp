@@ -287,11 +287,11 @@ int main() {
     textureRef->upload(imageRef);
 
     int NSplat = 1024;
-	std::vector<Splat> splats( NSplat );
+	std::vector<Splat> splats;
 
     float beta1t = 1.0f;
     float beta2t = 1.0f;
-    std::vector<SplatAdam> splatAdams(splats.size());
+    std::vector<SplatAdam> splatAdams;
 	Adam EpAdam = {};
 
 	const bool trainableE = true;
@@ -304,6 +304,8 @@ int main() {
 
 		beta1t = 1.0f;
 		beta2t = 1.0f;
+		splats.clear();
+		splats.resize( NSplat );
 		splatAdams.clear();
 		splatAdams.resize( NSplat );
 
@@ -931,6 +933,16 @@ int main() {
         ImGui::Text("fps = %f", GetFrameRate());
 		ImGui::Text( "%d itr, mse %.4f", iterations, mse );
 		ImGui::Text( "%d splats", NSplat );
+		if( ImGui::Button( "2x splat" ) )
+		{
+			NSplat *= 2;
+			init();
+		}
+		if( ImGui::Button( "1/2 splat" ) )
+		{
+			NSplat = ss_max( NSplat / 2, 1 );
+			init();
+		}
 		static int viewScale = 2;
 		ImGui::InputInt( "viewScale", &viewScale );
 
