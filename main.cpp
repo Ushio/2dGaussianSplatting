@@ -485,9 +485,6 @@ int main() {
 				glm::vec2 axis0 = eigen0 / std::sqrtf( lambda0 );
 				glm::vec2 axis1 = eigen1 / std::sqrtf( lambda1 );
 
-				//if( glm::length( axis0 ) < 100 && glm::length( axis1 ) < 100 )
-				//	goto novis;
-
 				//Draw axis
 				PrimVertex( glm::vec3( s.pos.x, -s.pos.y, 0 ), { 255, 255, 255 } );
 				PrimVertex( glm::vec3( s.pos.x, -s.pos.y, 0 ) + glm::vec3( axis0.x, -axis0.y, 0 ), { 255, 255, 255 } );
@@ -532,14 +529,13 @@ int main() {
 					sprintf( op, "o=%.2f, c=(%.2f, %.2f, %.2f)", s.opacity, s.color.x, s.color.y, s.color.z );
 					DrawText( glm::vec3( s.pos.x, -s.pos.y, 0 ), op, 12 );
 				}
-			novis:;
 			}
 
 			// The exact bounding box from covariance matrix
 			// float hsize_invCovX = std::sqrt( inv_cov[1][1] / det_of_inv ) * SPLAT_BOUNDS;
 			float hsize_invCovY = std::sqrt( inv_cov[0][0] / det_of_inv ) * SPLAT_BOUNDS;
-			int begY = s.pos.y - hsize_invCovY;
-			int endY = s.pos.y + hsize_invCovY;
+			int begY = ss_max( s.pos.y - hsize_invCovY, 0.0f );
+			int endY = ss_min( s.pos.y + hsize_invCovY, image0.height() -1.0f );
 			for( int y = begY; y <= endY; y++ )
 			{
 				if( y < 0 || image0.height() <= y )
@@ -622,14 +618,12 @@ int main() {
 			//float sinTheta = std::sinf( theta );
 
 			// The exact bounding box from covariance matrix
-			//// float hsize_invCovX = std::sqrt( inv_cov[1][1] * det ) * SPLAT_BOUNDS;
-			//float hsize_invCovY = std::sqrt( inv_cov[0][0] * det ) * SPLAT_BOUNDS;
 			float det_of_invcov = inv_cov[0][0] * inv_cov[1][1] - inv_cov[0][1] * inv_cov[1][0];
-			float hsize_invCovX = std::sqrt( inv_cov[1][1] / det_of_invcov ) * (float)SPLAT_BOUNDS;
+			// float hsize_invCovX = std::sqrt( inv_cov[1][1] / det_of_invcov ) * (float)SPLAT_BOUNDS;
 			float hsize_invCovY = std::sqrt( inv_cov[0][0] / det_of_invcov ) * (float)SPLAT_BOUNDS;
 
-			int begY = s.pos.y - hsize_invCovY;
-			int endY = s.pos.y + hsize_invCovY;
+			int begY = ss_max( s.pos.y - hsize_invCovY, 0.0f );
+			int endY = ss_min( s.pos.y + hsize_invCovY, image0.height() - 1.0f );
 			for( int y = begY; y <= endY; y++ )
 			{
 				if( y < 0 || image0.height() <= y )
