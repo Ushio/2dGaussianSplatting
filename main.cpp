@@ -295,7 +295,7 @@ int main() {
 	Adam EpAdam = {};
 
 	const bool trainableE = true;
-	float Ep = 1.0f;
+	float Ep = 0.0f;
 
 	int iterations = 0;
 
@@ -307,7 +307,7 @@ int main() {
 		splatAdams.clear();
 		splatAdams.resize( NSplat );
 
-		Ep = 1.0f;
+		Ep = 0.0f;
 
 		for( int i = 0; i < splats.size(); i++ )
 		{
@@ -451,7 +451,7 @@ int main() {
 		PrimBegin( PrimitiveMode::Lines, 1 );
 
         // forward
-		const float E = trainableE ? std::expf( -Ep ) : 0.001f;
+		const float E = trainableE ? std::expf( Ep ) : 0.001f;
         for( int i = 0; i < splats.size(); i++ )
 		{
 			Splat s = splats[i];
@@ -600,7 +600,7 @@ int main() {
 		std::fill( image1.data(), image1.data() + image1.width() * image1.height(), glm::vec4( 0.0f, 0.0f, 0.0f, 1.0f ) );
 		std::vector<Splat> dSplats( splats.size() );
 		float dEp = 0.0f;
-		float dE_dEp = -std::expf( -Ep );
+		float dE_dEp = E;
 		for( int i = 0; i < splats.size(); i++ )
 		{
 			Splat s = splats[i];
