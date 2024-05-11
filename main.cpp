@@ -790,7 +790,7 @@ int main() {
 		}
 
 		// optimize
-		float trainingRate = 0.03f;
+		float trainingRate = 0.05f;
 
 		// gradient decent
 		beta1t *= ADAM_BETA1;
