@@ -512,8 +512,8 @@ int main() {
 				}
 
 				// Draw the exact bounding box from covariance matrix
-				float hsize_invCovX = std::sqrt( inv_cov[1][1] / (det_of_inv + 1.0e-15f) );
-				float hsize_invCovY = std::sqrt( inv_cov[0][0] / (det_of_inv + 1.0e-15f) );
+				float hsize_invCovX = std::sqrt( inv_cov[1][1] / det_of_inv );
+				float hsize_invCovY = std::sqrt( inv_cov[0][0] / det_of_inv );
 				glm::vec3 vs[4] = {
 					{ -hsize_invCovX, -hsize_invCovY, 0.0f },
 					{ +hsize_invCovX, -hsize_invCovY, 0.0f },
@@ -536,8 +536,8 @@ int main() {
 			}
 
 			// The exact bounding box from covariance matrix
-			// float hsize_invCovX = std::sqrt( inv_cov[1][1] / (det_of_inv + 1.0e-15f)) * SPLAT_BOUNDS;
-			float hsize_invCovY = std::sqrt( inv_cov[0][0] / ( det_of_inv + 1.0e-15f ) ) * SPLAT_BOUNDS;
+			// float hsize_invCovX = std::sqrt( inv_cov[1][1] / det_of_inv ) * SPLAT_BOUNDS;
+			float hsize_invCovY = std::sqrt( inv_cov[0][0] / det_of_inv ) * SPLAT_BOUNDS;
 			int begY = s.pos.y - hsize_invCovY;
 			int endY = s.pos.y + hsize_invCovY;
 			for( int y = begY; y <= endY; y++ )
@@ -625,8 +625,8 @@ int main() {
 			//// float hsize_invCovX = std::sqrt( inv_cov[1][1] * det ) * SPLAT_BOUNDS;
 			//float hsize_invCovY = std::sqrt( inv_cov[0][0] * det ) * SPLAT_BOUNDS;
 			float det_of_invcov = inv_cov[0][0] * inv_cov[1][1] - inv_cov[0][1] * inv_cov[1][0];
-			float hsize_invCovX = std::sqrt( inv_cov[1][1] / ( det_of_invcov + 1e-15f ) ) * (float)SPLAT_BOUNDS;
-			float hsize_invCovY = std::sqrt( inv_cov[0][0] / ( det_of_invcov + 1e-15f ) ) * (float)SPLAT_BOUNDS;
+			float hsize_invCovX = std::sqrt( inv_cov[1][1] / det_of_invcov ) * (float)SPLAT_BOUNDS;
+			float hsize_invCovY = std::sqrt( inv_cov[0][0] / det_of_invcov ) * (float)SPLAT_BOUNDS;
 
 			int begY = s.pos.y - hsize_invCovY;
 			int endY = s.pos.y + hsize_invCovY;
