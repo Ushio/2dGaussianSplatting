@@ -922,6 +922,24 @@ int main() {
 
 		iterations++;
 
+		const int NMeasure = 2048;
+		static std::vector<float> mseList;
+		mseList.reserve( NMeasure );
+		if( mseList.size() < NMeasure )
+		{
+			mseList.push_back( mse );
+			if( mseList.size() == NMeasure )
+			{
+				FILE* fp = fopen( "measure_vec.csv", "w" );
+				fprintf( fp, "mse\n" );
+				for( int i = 0; i < mseList.size() ; i++)
+				{
+					fprintf( fp, "%.10f\n", mseList[i] );
+				}
+				fclose( fp );
+			}
+		}
+
         PopGraphicState();
         EndCamera();
 
