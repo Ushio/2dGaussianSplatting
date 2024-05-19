@@ -484,18 +484,18 @@ int main() {
 			glm::mat2 cov = cov_of( s );
 			glm::mat2 inv_cov = glm::inverse( cov );
 
-			float det_of_inv;
+			float det_of_cov;
 			float lambda0;
 			float lambda1;
-			eignValues( &lambda0, &lambda1, &det_of_inv, inv_cov );
+			eignValues( &lambda0, &lambda1, &det_of_cov, cov );
 
             glm::vec2 eigen0, eigen1;
-			eigenVectors_of_symmetric( &eigen0, &eigen1, inv_cov, lambda0 );
+			eigenVectors_of_symmetric( &eigen0, &eigen1, cov, lambda0 );
 
 			// visuallize
 			{
-				glm::vec2 axis0 = eigen0 / std::sqrtf( lambda0 );
-				glm::vec2 axis1 = eigen1 / std::sqrtf( lambda1 );
+				glm::vec2 axis0 = eigen0 * std::sqrtf( lambda0 );
+				glm::vec2 axis1 = eigen1 * std::sqrtf( lambda1 );
 
 				//Draw axis
 				PrimVertex( glm::vec3( s.pos.x, -s.pos.y, 0 ), { 255, 255, 255 } );
@@ -522,8 +522,8 @@ int main() {
 				}
 
 				// Draw the exact bounding box from covariance matrix
-				float hsize_invCovX = std::sqrt( inv_cov[1][1] / det_of_inv );
-				float hsize_invCovY = std::sqrt( inv_cov[0][0] / det_of_inv );
+				float hsize_invCovX = std::sqrt( inv_cov[1][1] * det_of_cov );
+				float hsize_invCovY = std::sqrt( inv_cov[0][0] * det_of_cov );
 				glm::vec3 vs[4] = {
 					{ -hsize_invCovX, -hsize_invCovY, 0.0f },
 					{ +hsize_invCovX, -hsize_invCovY, 0.0f },
@@ -546,7 +546,7 @@ int main() {
 
 			// The exact bounding box from covariance matrix
 			// float hsize_invCovX = std::sqrt( inv_cov[1][1] / det_of_inv ) * SPLAT_BOUNDS;
-			float hsize_invCovY = std::sqrt( inv_cov[0][0] / det_of_inv ) * SPLAT_BOUNDS;
+			float hsize_invCovY = std::sqrt( inv_cov[0][0] * det_of_cov ) * SPLAT_BOUNDS;
 			int begY = ss_max( s.pos.y - hsize_invCovY, 0.0f );
 			int endY = ss_min( s.pos.y + hsize_invCovY, image0.height() -1.0f );
 			for( int y = begY; y <= endY; y++ )
@@ -631,9 +631,9 @@ int main() {
 			//float sinTheta = std::sinf( theta );
 
 			// The exact bounding box from covariance matrix
-			float det_of_invcov = inv_cov[0][0] * inv_cov[1][1] - inv_cov[0][1] * inv_cov[1][0];
+			float det_of_cov = glm::determinant( cov );
 			// float hsize_invCovX = std::sqrt( inv_cov[1][1] / det_of_invcov ) * (float)SPLAT_BOUNDS;
-			float hsize_invCovY = std::sqrt( inv_cov[0][0] / det_of_invcov ) * (float)SPLAT_BOUNDS;
+			float hsize_invCovY = std::sqrt( inv_cov[0][0] * det_of_cov ) * (float)SPLAT_BOUNDS;
 
 			int begY = ss_max( s.pos.y - hsize_invCovY, 0.0f );
 			int endY = ss_min( s.pos.y + hsize_invCovY, image0.height() - 1.0f );
@@ -732,7 +732,7 @@ int main() {
 						//}
 
 						// vectors v2
-						float det_of_cov = glm::determinant( cov );
+						
 						float inv_det_of_cov_sq = 1.0f / ( det_of_cov * det_of_cov );
 
 						float Ca = v.x * cov[1][1] - v.y * cov[0][1];
