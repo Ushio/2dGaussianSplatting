@@ -48,7 +48,7 @@ inline T ss_min( T x, T y )
 }
 float exp_approx( float x )
 {
-	return expf( glm::clamp( x, -16.0f, 16.0f ) ); // use this for numerical varidation
+	// return expf( glm::clamp( x, -16.0f, 16.0f ) ); // use this for numerical varidation
 
 	/*
 	float L = 0.0f;
