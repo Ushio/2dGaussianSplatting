@@ -310,10 +310,6 @@ int main() {
     float beta1t = 1.0f;
     float beta2t = 1.0f;
     std::vector<SplatAdam> splatAdams;
-	Adam EpAdam = {};
-
-	const bool trainableE = true;
-	float Ep = 0.0f;
 
 	int iterations = 0;
 
@@ -326,8 +322,6 @@ int main() {
 		splats.resize( NSplat );
 		splatAdams.clear();
 		splatAdams.resize( NSplat );
-
-		Ep = 0.0f;
 
 		for( int i = 0; i < splats.size(); i++ )
 		{
@@ -353,8 +347,8 @@ int main() {
 			//	s.u = glm::vec2( 1.0f, 0.0f ) / glm::mix( 6.0f, 10.0f, r1.x );
 			//	s.v = glm::vec2( 0.0f, 1.0f ) / glm::mix( 6.0f, 10.0f, r1.y );
 			//}
-			s.u = glm::vec2( 1, glm::mix( 6.0f, 10.0f, r1.x ) );
-			s.v = glm::vec2( glm::mix( 6.0f, 10.0f, r1.y ), 1 );
+			s.u = glm::vec2( 1, 0 );
+			s.v = glm::vec2( 0, 1 );
 			s.color = { 0.5f, 0.5f, 0.5f };
 			s.opacity = 1.0f;
 			splats[i] = s;
@@ -474,7 +468,6 @@ int main() {
 		PrimBegin( PrimitiveMode::Lines, 1 );
 
         // forward
-		const float E = trainableE ? std::expf( Ep ) : 0.001f;
         for( int i = 0; i < splats.size(); i++ )
 		{
 			Splat s = splats[i];
@@ -488,12 +481,6 @@ int main() {
 			//float sqrt_of_lambda0 = std::sqrtf( lambda0 );
 			//float sqrt_of_lambda1 = std::sqrtf( lambda1 );
 
-			//glm::mat2 inv_cov =
-			//	glm::mat2(
-			//		cov[1][1], -cov[0][1],
-			//		-cov[1][0], cov[0][0] ) /
-			//	det; 
-			// glm::mat2 inv_cov = inv_cov_of( s, E );
 			glm::mat2 cov = cov_of( s );
 			glm::mat2 inv_cov = glm::inverse( cov );
 
@@ -621,8 +608,6 @@ int main() {
         // backward
 		std::fill( image1.data(), image1.data() + image1.width() * image1.height(), glm::vec4( 0.0f, 0.0f, 0.0f, 1.0f ) );
 		std::vector<Splat> dSplats( splats.size() );
-		float dEp = 0.0f;
-		float dE_dEp = E;
 		for( int i = 0; i < splats.size(); i++ )
 		{
 			Splat s = splats[i];
@@ -891,8 +876,6 @@ int main() {
 		beta1t *= ADAM_BETA1;
 		beta2t *= ADAM_BETA2;
 
-		Ep = EpAdam.optimize( Ep, dEp, trainingRate, beta1t, beta2t );
-
 		for( int i = 0; i < splats.size(); i++ )
 		{
 			splats[i].color.x = splatAdams[i].color[0].optimize( splats[i].color.x, dSplats[i].color.x, trainingRate, beta1t, beta2t );
@@ -1078,11 +1061,6 @@ int main() {
 		ImGui::Checkbox( "Optimize opacity", &optimizeOpacity );
 		ImGui::Checkbox( "Show splat info", &showSplatInfo );
 
-		if( trainableE )
-		{
-			ImGui::Text( "Ep %f", Ep );
-		}
-		
 		if( ImGui::Button( "Restart" ) )
 		{
 			init();
