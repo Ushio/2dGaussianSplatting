@@ -353,8 +353,8 @@ int main() {
 			//	s.u = glm::vec2( 1.0f, 0.0f ) / glm::mix( 6.0f, 10.0f, r1.x );
 			//	s.v = glm::vec2( 0.0f, 1.0f ) / glm::mix( 6.0f, 10.0f, r1.y );
 			//}
-			s.u = glm::vec2( 1, 0 );
-			s.v = glm::vec2( 0, 1 );
+			s.u = glm::vec2( 1, glm::mix( 6.0f, 10.0f, r1.x ) );
+			s.v = glm::vec2( glm::mix( 6.0f, 10.0f, r1.y ), 1 );
 			s.color = { 0.5f, 0.5f, 0.5f };
 			s.opacity = 1.0f;
 			splats[i] = s;
@@ -750,12 +750,12 @@ int main() {
 						float det_of_cov = glm::determinant( cov );
 						float inv_det_of_cov_sq = 1.0f / ( det_of_cov * det_of_cov );
 
-						float dalpha_daPrime = alpha * inv_det_of_cov_sq * 0.5f * sqr( v.x * cov[1][1] - v.y * cov[0][1] );
-						float dalpha_ddPrime = alpha * inv_det_of_cov_sq * 0.5f * sqr( v.x * cov[0][1] - v.y * cov[0][0] );
-
-						float dalpha_dbPrime = -alpha * inv_det_of_cov_sq * 
-							( v.x * v.x * cov[0][1] * cov[1][1] - v.x * v.y * ( det_of_cov + 2.0f * sqr( cov[0][1] ) ) + v.y * v.y * cov[0][0] * cov[0][1] );
-
+						float Ca = v.x * cov[1][1] - v.y * cov[0][1];
+						float Cb = v.x * cov[0][1] - v.y * cov[0][0];
+						float dalpha_daPrime = alpha * inv_det_of_cov_sq * 0.5f * Ca * Ca;
+						float dalpha_dbPrime = -alpha * inv_det_of_cov_sq * Ca * Cb;
+						float dalpha_ddPrime = alpha * inv_det_of_cov_sq * 0.5f * Cb * Cb;
+						
 						//float eps = 0.01f;
 						//glm::mat2 cov_cp = cov;
 						//cov_cp[0][0] += eps;
