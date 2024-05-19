@@ -48,7 +48,7 @@ inline T ss_min( T x, T y )
 }
 float exp_approx( float x )
 {
-	return expf( x ); // use this for numerical varidation
+	return expf( glm::clamp( x, -16.0f, 16.0f ) ); // use this for numerical varidation
 
 	/*
 	float L = 0.0f;
@@ -225,25 +225,25 @@ glm::mat2 rot2d( float rad )
 //}
 
 
-glm::mat2 inv_cov_of( const Splat& splat, float E )
+//glm::mat2 inv_cov_of( const Splat& splat, float E )
+//{
+//	const glm::vec2& u = splat.u;
+//	const glm::vec2& v = splat.v;
+//	float a = u.x * u.x + v.x * v.x + E;
+//	float b = u.x * u.y + v.x * v.y;
+//	float d = u.y * u.y + v.y * v.y + E;
+//	return glm::mat2(
+//		a, b,
+//		b, d );
+//}
+glm::mat2 cov_of( const Splat& splat )
 {
+	const float E = 1.0e-4f;
 	const glm::vec2& u = splat.u;
 	const glm::vec2& v = splat.v;
 	float a = u.x * u.x + v.x * v.x + E;
 	float b = u.x * u.y + v.x * v.y;
 	float d = u.y * u.y + v.y * v.y + E;
-	return glm::mat2(
-		a, b,
-		b, d );
-}
-glm::mat2 cov_of( const Splat& splat )
-{
-	float eps = 0.01f;
-	const glm::vec2& u = splat.u;
-	const glm::vec2& v = splat.v;
-	float a = u.x * u.x + v.x * v.x + eps; // TODO check
-	float b = u.x * u.y + v.x * v.y;
-	float d = u.y * u.y + v.y * v.y + eps;
 	return glm::mat2(
 		a, b,
 		b, d );
@@ -353,13 +353,14 @@ int main() {
 			//	s.u = glm::vec2( 1.0f, 0.0f ) / glm::mix( 6.0f, 10.0f, r1.x );
 			//	s.v = glm::vec2( 0.0f, 1.0f ) / glm::mix( 6.0f, 10.0f, r1.y );
 			//}
-			s.u = glm::vec2( glm::mix( 6.0f, 10.0f, r1.x ), 1.0f );
-			s.v = glm::vec2( 1.0f, glm::mix( 6.0f, 10.0f, r1.y ) );
+			s.u = glm::vec2( 1, 0 );
+			s.v = glm::vec2( 0, 1 );
 			s.color = { 0.5f, 0.5f, 0.5f };
 			s.opacity = 1.0f;
 			splats[i] = s;
 		}
 	};
+
 
 	init();
 
@@ -516,10 +517,11 @@ int main() {
 				PrimVertex( glm::vec3( s.pos.x, -s.pos.y, 0 ), { 255, 255, 255 } );
 				PrimVertex( glm::vec3( s.pos.x, -s.pos.y, 0 ) + glm::vec3( axis1.x, -axis1.y, 0 ), { 230, 230, 230 } );
 				
-				//PrimVertex( glm::vec3( s.pos.x, -s.pos.y, 0 ), { 255, 0, 0 } );
-				//PrimVertex( glm::vec3( s.pos.x, -s.pos.y, 0 ) + glm::vec3( s.u.x, -s.u.y, 0 ) / glm::dot( s.u, s.u ), { 230, 230, 230 } );
-				//PrimVertex( glm::vec3( s.pos.x, -s.pos.y, 0 ), { 0, 255, 0 } );
-				//PrimVertex( glm::vec3( s.pos.x, -s.pos.y, 0 ) + glm::vec3( s.v.x, -s.v.y, 0 ) / glm::dot( s.v, s.v ), { 230, 230, 230 } );
+				// UV
+				PrimVertex( glm::vec3( s.pos.x, -s.pos.y, 0 ), { 255, 128, 128 } );
+				PrimVertex( glm::vec3( s.pos.x, -s.pos.y, 0 ) + glm::vec3( s.u.x, -s.u.y, 0 ), { 255, 128, 128 } );
+				PrimVertex( glm::vec3( s.pos.x, -s.pos.y, 0 ), { 128, 255, 128 } );
+				PrimVertex( glm::vec3( s.pos.x, -s.pos.y, 0 ) + glm::vec3( s.v.x, -s.v.y, 0 ), { 128, 255, 128 } );
 
 				//Draw Ellipse
 				int nvtx = 16;
@@ -920,6 +922,22 @@ int main() {
 			splats[i].pos.x = glm::clamp( splats[i].pos.x, 0.0f, (float)imageRef.width() - 1 );
 			splats[i].pos.y = glm::clamp( splats[i].pos.y, 0.0f, (float)imageRef.height() - 1 );
 
+			//float crossVal = splats[i].u.x * splats[i].v.y - splats[i].u.y * splats[i].v.x;
+			//if (glm::abs(crossVal) < 0.01f)
+			//{
+			//	printf( "crossVal %f\n", crossVal );
+			//}
+
+			//auto new_cov = cov_of( splats[i] );
+			//float d = glm::determinant( new_cov );
+			//if (d == 0.0f)
+			//{
+			//	printf( "a\n" );
+			//}
+			//if (isfinite(dSplats[i].pos.x) == false)
+			//{
+			//	printf( "a\n" );
+			//}
 			//splats[i].sx = glm::clamp( splats[i].sx, 1.0f, 1024.0f );
 			//splats[i].sy = glm::clamp( splats[i].sy, 1.0f, 1024.0f );
 
@@ -1069,6 +1087,16 @@ int main() {
 		{
 			init();
 		}
+
+		//if (ImGui::Button("d"))
+		//{
+		//	for (int i = 0; i < splats.size(); i++)
+		//	{
+		//		// printf( "%f, %f, %f{%f,%f} {%f,%f}\n", splats[i].color.x, splats[i].color.y, splats[i].color.z, splats[i].u.x, splats[i].u.y, splats[i].v.x, splats[i].v.y );
+		//		float crossVal = splats[i].u.x * splats[i].v.y - splats[i].u.y * splats[i].v.x;
+		//		printf( "%f, %f, %f{%f,%f} {%f,%f} %f\n", splats[i].color.x, splats[i].color.y, splats[i].color.z, splats[i].u.x, splats[i].u.y, splats[i].v.x, splats[i].v.y, crossVal );
+		//	}
+		//}
 		
 		viewScale = ss_max( viewScale, 1 );
 
