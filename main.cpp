@@ -48,7 +48,7 @@ inline T ss_min( T x, T y )
 }
 float exp_approx( float x )
 {
-	//return expf( x ); // use this for numerical varidation
+	return expf( x ); // use this for numerical varidation
 
 	/*
 	float L = 0.0f;
@@ -236,6 +236,18 @@ glm::mat2 inv_cov_of( const Splat& splat, float E )
 		a, b,
 		b, d );
 }
+glm::mat2 cov_of( const Splat& splat )
+{
+	float eps = 0.01f;
+	const glm::vec2& u = splat.u;
+	const glm::vec2& v = splat.v;
+	float a = u.x * u.x + v.x * v.x + eps; // TODO check
+	float b = u.x * u.y + v.x * v.y;
+	float d = u.y * u.y + v.y * v.y + eps;
+	return glm::mat2(
+		a, b,
+		b, d );
+}
 
 void eigenVectors_of_symmetric( glm::vec2* eigen0, glm::vec2* eigen1, const glm::mat2& m, float lambda )
 {
@@ -250,6 +262,12 @@ void eigenVectors_of_symmetric( glm::vec2* eigen0, glm::vec2* eigen1, const glm:
 	*eigen0 = e0;
 	*eigen1 = e1;
 }
+
+float sqr(float x)
+{
+	return x * x;
+}
+
 
 int main() {
     using namespace pr;
@@ -325,16 +343,18 @@ int main() {
 			// s.sy = 8;
 			// s.rot = glm::pi<float>() * r1.z;
 			
-			if (trainableE)
-			{
-				s.u = glm::vec2( 1.0f, 0.0f );
-				s.v = glm::vec2( 0.0f, 1.0f );
-			}
-			else
-			{
-				s.u = glm::vec2( 1.0f, 0.0f ) / glm::mix( 6.0f, 10.0f, r1.x );
-				s.v = glm::vec2( 0.0f, 1.0f ) / glm::mix( 6.0f, 10.0f, r1.y );
-			}
+			//if (trainableE)
+			//{
+			//	s.u = glm::vec2( 1.0f, 0.0f );
+			//	s.v = glm::vec2( 0.0f, 1.0f );
+			//}
+			//else
+			//{
+			//	s.u = glm::vec2( 1.0f, 0.0f ) / glm::mix( 6.0f, 10.0f, r1.x );
+			//	s.v = glm::vec2( 0.0f, 1.0f ) / glm::mix( 6.0f, 10.0f, r1.y );
+			//}
+			s.u = glm::vec2( glm::mix( 6.0f, 10.0f, r1.x ), 1.0f );
+			s.v = glm::vec2( 1.0f, glm::mix( 6.0f, 10.0f, r1.y ) );
 			s.color = { 0.5f, 0.5f, 0.5f };
 			s.opacity = 1.0f;
 			splats[i] = s;
@@ -472,7 +492,9 @@ int main() {
 			//		cov[1][1], -cov[0][1],
 			//		-cov[1][0], cov[0][0] ) /
 			//	det; 
-			glm::mat2 inv_cov = inv_cov_of( s, E );
+			// glm::mat2 inv_cov = inv_cov_of( s, E );
+			glm::mat2 cov = cov_of( s );
+			glm::mat2 inv_cov = glm::inverse( cov );
 
 			float det_of_inv;
 			float lambda0;
@@ -604,7 +626,9 @@ int main() {
 			Splat s = splats[i];
 
 			// glm::mat2 cov = cov_of( s );
-			glm::mat2 inv_cov = inv_cov_of( s, E );
+			// glm::mat2 inv_cov = inv_cov_of( s, E );
+			glm::mat2 cov = cov_of( s );
+			glm::mat2 inv_cov = glm::inverse( cov );
 
 			// det = det(cov) = 1 / det(inv_cov)
 			// sx * sy is an alternative. but leave it as the 3d spatting case can't use original scale in screen space.
@@ -708,17 +732,86 @@ int main() {
 						dSplats[i].pos.y += dL_dalpha_rgb * dalpha_dy;
 
 						// vectors
-						glm::vec2 da_du = - alpha * v * glm::dot( v, s.u );
-						glm::vec2 da_dv = - alpha * v * glm::dot( v, s.v );
-						dSplats[i].u += dL_dalpha_rgb * da_du;
-						dSplats[i].v += dL_dalpha_rgb * da_dv;
+						//glm::vec2 da_du = - alpha * v * glm::dot( v, s.u );
+						//glm::vec2 da_dv = - alpha * v * glm::dot( v, s.v );
+						//dSplats[i].u += dL_dalpha_rgb * da_du;
+						//dSplats[i].v += dL_dalpha_rgb * da_dv;
 
-						if( trainableE )
-						{
-							float dalpha_dE = -0.5f * alpha * glm::dot( v, v );
-							float dalpha_dep = dalpha_dE * dE_dEp;
-							dEp += dL_dalpha_rgb * dalpha_dep;
-						}
+						//if( trainableE )
+						//{
+						//	float dalpha_dE = -0.5f * alpha * glm::dot( v, v );
+						//	float dalpha_dep = dalpha_dE * dE_dEp;
+						//	dEp += dL_dalpha_rgb * dalpha_dep;
+						//}
+
+						// vectors v2
+						float det_of_cov = glm::determinant( cov );
+						float inv_det_of_cov_sq = 1.0f / ( det_of_cov * det_of_cov );
+
+						float dalpha_daPrime = alpha * inv_det_of_cov_sq * 0.5f * sqr( v.x * cov[1][1] - v.y * cov[0][1] );
+						float dalpha_ddPrime = alpha * inv_det_of_cov_sq * 0.5f * sqr( v.x * cov[0][1] - v.y * cov[0][0] );
+
+						float dalpha_dbPrime = -alpha * inv_det_of_cov_sq * 
+							( v.x * v.x * cov[0][1] * cov[1][1] - v.x * v.y * ( det_of_cov + 2.0f * sqr( cov[0][1] ) ) + v.y * v.y * cov[0][0] * cov[0][1] );
+
+						//float eps = 0.01f;
+						//glm::mat2 cov_cp = cov;
+						//cov_cp[0][0] += eps;
+						//float derivative = ( s.opacity * exp_approx( -0.5f * glm::dot( v, glm::inverse( cov_cp ) * v ) ) - alpha ) / eps;
+						//printf( "%f %f\n", dalpha_daPrime, derivative );
+
+						//float eps = 0.01f;
+						//glm::mat2 cov_cp = cov;
+						//cov_cp[1][1] += eps;
+						//float derivative = ( s.opacity * exp_approx( -0.5f * glm::dot( v, glm::inverse( cov_cp ) * v ) ) - alpha ) / eps;
+						//printf( "%f %f\n", dalpha_ddPrime, derivative );
+
+						//float eps = 0.001f;
+						//glm::mat2 cov_cp = cov;
+						//cov_cp[0][1] += eps;
+						//cov_cp[1][0] += eps;
+						//float derivative = ( s.opacity * exp_approx( -0.5f * glm::dot( v, glm::inverse( cov_cp ) * v ) ) - alpha ) / eps;
+						//printf( "%f %f\n", dalpha_dbPrime, derivative );
+
+						glm::vec3 dalpha_dabcPrime = { dalpha_daPrime, dalpha_dbPrime, dalpha_ddPrime };
+						glm::vec3 dabcPrime_dux = { 2.0f * s.u.x, s.u.y, 0.0f };
+						float dalpha_dux = glm::dot( dalpha_dabcPrime, dabcPrime_dux );
+
+						//float eps = 0.0001f;
+						//Splat ds = s;
+						//ds.u.x += eps;
+						//float derivative = ( s.opacity * exp_approx( -0.5f * glm::dot( v, glm::inverse( cov_of(ds) ) * v ) ) - alpha ) / eps;
+						//printf( "%f %f\n", dalpha_dux, derivative );
+
+						glm::vec3 dabcPrime_duy = { 0.0f, s.u.x, 2.0f * s.u.y };
+						float dalpha_duy = glm::dot( dalpha_dabcPrime, dabcPrime_duy );
+
+						//float eps = 0.0001f;
+						//Splat ds = s;
+						//ds.u.y += eps;
+						//float derivative = ( s.opacity * exp_approx( -0.5f * glm::dot( v, glm::inverse( cov_of( ds ) ) * v ) ) - alpha ) / eps;
+						//printf( "%f %f\n", dalpha_duy, derivative );
+
+						glm::vec3 dabcPrime_dvx = { 2.0f * s.v.x, s.v.y, 0.0f };
+						float dalpha_dvx = glm::dot( dalpha_dabcPrime, dabcPrime_dvx );
+						glm::vec3 dabcPrime_dvy = { 0.0f, s.v.x, 2.0f * s.v.y };
+						float dalpha_dvy = glm::dot( dalpha_dabcPrime, dabcPrime_dvy );
+
+						//float eps = 0.0001f;
+						//Splat ds = s;
+						//ds.v.x += eps;
+						//float derivative = ( s.opacity * exp_approx( -0.5f * glm::dot( v, glm::inverse( cov_of(ds) ) * v ) ) - alpha ) / eps;
+						//printf( "%f %f\n", dalpha_dvx, derivative );
+						//float eps = 0.0001f;
+						//Splat ds = s;
+						//ds.v.y += eps;
+						//float derivative = ( s.opacity * exp_approx( -0.5f * glm::dot( v, glm::inverse( cov_of( ds ) ) * v ) ) - alpha ) / eps;
+						//printf( "%f %f\n", dalpha_dvy, derivative );
+
+						dSplats[i].u.x += dL_dalpha_rgb * dalpha_dux;
+						dSplats[i].u.y += dL_dalpha_rgb * dalpha_duy;
+						dSplats[i].v.x += dL_dalpha_rgb * dalpha_dvx;
+						dSplats[i].v.y += dL_dalpha_rgb * dalpha_dvy;
 
 						 // numerical varidation
 						//float prevEp = Ep; 
