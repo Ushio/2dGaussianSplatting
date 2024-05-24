@@ -206,36 +206,6 @@ glm::mat2 rot2d( float rad )
 	return glm::mat2( cosTheta, sinTheta, -sinTheta, cosTheta );
 };
 
-// \sigma = V * L * V^(-1)
-//glm::mat2 cov_of( const Splat& splat )
-//{
-//	float theta = splat.rot;
-//	float sx = splat.sx;
-//	float sy = splat.sy;
-//
-//	float cosTheta = std::cosf( theta );
-//	float sinTheta = std::sinf( theta );
-//	float lambda0 = sx * sx;
-//	float lambda1 = sy * sy;
-//	float s11 = lambda0 * cosTheta * cosTheta + lambda1 * sinTheta * sinTheta;
-//	float s12 = ( lambda0 - lambda1 ) * sinTheta * cosTheta;
-//	return glm::mat2(
-//		s11, s12,
-//		s12, lambda0 + lambda1 - s11 );
-//}
-
-
-//glm::mat2 inv_cov_of( const Splat& splat, float E )
-//{
-//	const glm::vec2& u = splat.u;
-//	const glm::vec2& v = splat.v;
-//	float a = u.x * u.x + v.x * v.x + E;
-//	float b = u.x * u.y + v.x * v.y;
-//	float d = u.y * u.y + v.y * v.y + E;
-//	return glm::mat2(
-//		a, b,
-//		b, d );
-//}
 glm::mat2 cov_of( const Splat& splat )
 {
 	const float E = 1.0e-4f;
@@ -249,25 +219,45 @@ glm::mat2 cov_of( const Splat& splat )
 		b, d );
 }
 
-void eigenVectors_of_symmetric( glm::vec2* eigen0, glm::vec2* eigen1, const glm::mat2& m, float lambda )
-{
-	float s11 = m[0][0];
-	float s22 = m[1][1];
-	float s12 = m[1][0];
-
-	// to workaround lambda0 == lambda1
-	float eps = 1e-15f;
-	glm::vec2 e0 = glm::normalize( s11 < s22 ? glm::vec2( s12 + eps, lambda - s11 ) : glm::vec2( lambda - s22, s12 + eps ) );
-	glm::vec2 e1 = { -e0.y, e0.x };
-	*eigen0 = e0;
-	*eigen1 = e1;
-}
-
 float sqr(float x)
 {
 	return x * x;
 }
 
+inline float ss_sqrt( float x )
+{
+	float y;
+	_mm_store_ss( &y, _mm_sqrt_ss( _mm_load_ss( &x ) ) );
+	return y;
+}
+void eigen_decomposition( glm::vec2 es[2], float lambdas[2], float A_00, float A_01, float A_11 )
+{
+	// glm::mat2 P = glm::mat2(
+	//     c, -s,
+	//     s, c,
+	//);
+
+	// jacobi method - geometric solution
+	float X = 0.5f * ( A_11 - A_00 );
+	float Y = A_01;
+	float YY = Y * Y;
+	float L = ss_sqrt( ss_max( X * X + YY, FLT_MIN ) /* handle the singularity */ );
+
+	// The half vector
+	float hx = X + sign_of( X ) * L;
+	float hy = Y;
+	float hyhy = YY;
+	float lh = ss_sqrt( hx * hx + hyhy );
+	float t = hy / hx;
+	float c = hx / lh;
+	float s = c * t;
+
+	// simplified via new A_01 == 0
+	lambdas[0] = A_00 - t * A_01;
+	lambdas[1] = A_11 + t * A_01;
+	es[0] = { c, -s };
+	es[1] = { s, c };
+}
 
 int main() {
     using namespace pr;
@@ -472,30 +462,18 @@ int main() {
 		{
 			Splat s = splats[i];
 
-   //         glm::mat2 cov = cov_of( s );
-
-			//float det;
-			//float lambda0;
-			//float lambda1;
-			//eignValues( &lambda0, &lambda1, &det, cov );
-			//float sqrt_of_lambda0 = std::sqrtf( lambda0 );
-			//float sqrt_of_lambda1 = std::sqrtf( lambda1 );
-
 			glm::mat2 cov = cov_of( s );
 			glm::mat2 inv_cov = glm::inverse( cov );
 
-			float det_of_cov;
-			float lambda0;
-			float lambda1;
-			eignValues( &lambda0, &lambda1, &det_of_cov, cov );
-
-            glm::vec2 eigen0, eigen1;
-			eigenVectors_of_symmetric( &eigen0, &eigen1, cov, lambda0 );
+			float lambdas[2];
+			glm::vec2 es[2];
+			eigen_decomposition( es, lambdas, cov[0][0], cov[0][1], cov[1][1] );
+			float det_of_cov = lambdas[0] * lambdas[1];
 
 			// visuallize
 			{
-				glm::vec2 axis0 = eigen0 * std::sqrtf( lambda0 );
-				glm::vec2 axis1 = eigen1 * std::sqrtf( lambda1 );
+				glm::vec2 axis0 = es[0] * std::sqrtf( lambdas[0] );
+				glm::vec2 axis1 = es[1] * std::sqrtf( lambdas[1] );
 
 				//Draw axis
 				PrimVertex( glm::vec3( s.pos.x, -s.pos.y, 0 ), { 255, 255, 255 } );
@@ -612,23 +590,8 @@ int main() {
 		{
 			Splat s = splats[i];
 
-			// glm::mat2 cov = cov_of( s );
-			// glm::mat2 inv_cov = inv_cov_of( s, E );
 			glm::mat2 cov = cov_of( s );
 			glm::mat2 inv_cov = glm::inverse( cov );
-
-			// det = det(cov) = 1 / det(inv_cov)
-			// sx * sy is an alternative. but leave it as the 3d spatting case can't use original scale in screen space.
-			//float det = cov[0][0] * cov[1][1] - cov[1][0] * cov[0][1];
-			//glm::mat2 inv_cov =
-			//	glm::mat2(
-			//		cov[1][1], -cov[0][1],
-			//		-cov[1][0], cov[0][0] ) /
-			//	det;
-
-			//float theta = s.rot;
-			//float cosTheta = std::cosf( theta );
-			//float sinTheta = std::sinf( theta );
 
 			// The exact bounding box from covariance matrix
 			float det_of_cov = glm::determinant( cov );
